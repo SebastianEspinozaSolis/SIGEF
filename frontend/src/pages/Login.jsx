@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 
 // Página de login que permite a los usuarios autenticarse en la aplicación
 export default function Login() {
-    const { usuario, login } = useAuth();
+    const { usuario, login, mensajeSesion } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -26,8 +26,9 @@ export default function Login() {
     return (
         <form onSubmit={enviar}>
             <h1>SIGEF</h1>
-            <input type="email" placeholder="Correo" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <input type="password" placeholder="Contraseña" value={password} onChange={(e) => setPassword(e.target.value)} />
+            {mensajeSesion && <p role="status">{mensajeSesion}</p>}
+            <input type="email" maxLength={120} placeholder="Correo" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input type="password" maxLength={72} placeholder="Contraseña" value={password} onChange={(e) => setPassword(e.target.value)} />
             <button type="submit">Entrar</button>
             {error && <p>{error}</p>}
         </form>

@@ -12,6 +12,7 @@ export default function Inicio() {
         <div>
             <h1>Hola, {usuario.nombres}</h1>
             {usuario.rol === ROLES.ADMIN && <Link to="/admin/usuarios">Gestionar usuarios</Link>}
+            {usuario.rol === ROLES.ADMIN && <Link to="/admin/auditoria">Gestionar auditoria</Link>}
         </div>
     );
 }

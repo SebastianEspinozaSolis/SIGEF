@@ -5,6 +5,7 @@ const express = require('express'); //Framework
 const cors = require('cors'); // Permisos para API
 const helmet = require('helmet'); // Seguridad
 const pool = require('./db'); // Conexión a db.js
+const ErrorHttp = require('./utils/ErrorHttp');
 
 const app = express(); //Instancia de express
 
@@ -24,12 +25,19 @@ app.get('/api/health', async (req, res) => {
 });
 
 // Modulos
-app.use('/api/auth', require('./modules/auth.routes'));
-app.use('/api/usuarios', require('./modules/usuarios.routes'));
-app.use('/api/roles', require('./modules/roles.routes'));
+app.use('/api/auth', require('./modules/auth/routes'));
+app.use('/api/usuarios', require('./modules/usuarios/routes'));
+app.use('/api/roles', require('./modules/roles/routes'));
+app.use('/api/auditoria', require('./modules/auditoria/routes'));
 
 // Manejo de errores
 app.use((err, req, res, next) => {
+  // Los servicios lanzan estos errores para conservar los mensajes y estados esperados
+  if (err instanceof ErrorHttp) {
+    const respuesta = { mensaje: err.message };
+    if (err.errores) respuesta.errores = err.errores;
+    return res.status(err.status).json(respuesta);
+  }
   console.error(err);
   res.status(500).json({mensaje:'Error interno del servidor'});
 })

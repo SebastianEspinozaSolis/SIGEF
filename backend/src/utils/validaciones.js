@@ -43,7 +43,7 @@ function validarPassword(password) {
     return (
         typeof password === 'string' && // Verifica que sea una cadena de texto
         password.length >= 8 && // Mínimo 8 caracteres
-        password.length <= 72 && // Máximo 72 caracteres (bcrypt ignora lo que pase de 72)
+        Buffer.byteLength(password, 'utf8') <= 72 && // Límite de bcrypt en bytes
         /[A-Za-z]/.test(password) && // Al menos una letra
         /\d/.test(password) // Al menos un número
     );

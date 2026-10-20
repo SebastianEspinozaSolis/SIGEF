@@ -20,6 +20,10 @@ export async function api(ruta, { method = 'GET', body } = {}) {
 
     // Manejo de errores centralizado
     if (!res.ok) {
+        if (res.status === 401 && token && ruta !== '/api/auth/login') { // Si el token es invalido o expiro, se elimina y se notifica al resto de la app
+            localStorage.removeItem('token'); // Elimina token invalido
+            window.dispatchEvent(new Event('sesion-invalida')); // Lleva al login
+        }
         const error = new Error(data.mensaje || 'Error en la petición');
         error.status = res.status;
         error.errores = data.errores;
