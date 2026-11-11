@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const pool = require('../../db');
 const ErrorHttp = require('../../utils/ErrorHttp');
 const { registrarAuditoria } = require('../auditoria/service');
-const { limpiarTexto, normalizarRut, validarRut, validarEmail, validarNombre, validarPassword } = require('../../utils/validaciones');
+const { limpiarTexto, normalizarRut, errorRut, validarEmail, validarNombre, validarPassword } = require('../../utils/validaciones');
 
 // Lista usuarios sin devolver hashes de contraseñas
 async function listarUsuarios() {
@@ -27,7 +27,7 @@ async function crearUsuario(datos, idResponsable) {
 
     // Se juntan todos los errores para mostrarlos de una vez, campo por campo
     const errores = {};
-    if (!validarRut(rut)) errores.rut = 'RUT inválido (ej: 12345678-5)';
+    if (errorRut(rut)) errores.rut = errorRut(rut);
     if (!validarNombre(nombres)) errores.nombres = 'Mínimo 2 letras, sin números ni símbolos';
     if (!validarNombre(apellidos)) errores.apellidos = 'Mínimo 2 letras, sin números ni símbolos';
     if (!validarEmail(email)) errores.email = 'Correo inválido (ej: nombre@empresa.cl)';

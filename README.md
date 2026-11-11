@@ -71,6 +71,21 @@ Crear el usuario administrador (una sola vez, y de nuevo cada vez que se reinici
 node src/scripts/crearAdmin.js admin@fyag.cl Admin1234
 ```
 
+Para cargar cuentas ficticias de desarrollo de los demás roles (después de `seed.sql`), desde `backend`:
+
+```powershell
+node src/scripts/crearUsuariosPrueba.js
+```
+
+| Correo | Contraseña de prueba | Rol |
+|---|---|---|
+| administracion@fyag.cl | Administracion1234 | Administración |
+| bodega@fyag.cl | Bodega1234 | Bodega/Logística |
+| supervisor@fyag.cl | Supervisor1234 | Supervisor de Obras |
+| tecnico@fyag.cl | Tecnico1234 | Técnico |
+
+Incluye nombres ficticios y RUT con verificador válido. Los datos son fijos para repetir la carga sin duplicar cuentas. Si un correo o RUT ya existe, se omite sin modificar la contraseña, el rol ni los demás datos. El administrador se crea con el script anterior. Estas cuentas son solo para pruebas; el script no se ejecuta automáticamente al iniciar el servidor. Reiniciar el backend no elimina usuarios: vuelve a ejecutarlo si recreas la base.
+
 Levantar el servidor:
  
 ```

@@ -29,6 +29,16 @@ app.use('/api/auth', require('./modules/auth/routes'));
 app.use('/api/usuarios', require('./modules/usuarios/routes'));
 app.use('/api/roles', require('./modules/roles/routes'));
 app.use('/api/auditoria', require('./modules/auditoria/routes'));
+// Primera entrega de Alpha: fichas y catálogo, sin movimientos de inventario.
+app.use('/api/clientes', require('./modules/clientes/routes'));
+app.use('/api/recepciones-compra', require('./modules/recepciones-compra/routes'));
+app.use('/api/documentos-proveedor', require('./modules/documentos-proveedor/routes'));
+app.use('/api/proveedores', require('./modules/proveedores/routes'));
+app.use('/api/categorias', require('./modules/categorias/routes'));
+app.use('/api/movimientos', require('./modules/movimientos/routes'));
+app.use('/api/articulos', require('./modules/articulos/routes'));
+app.use('/api/inventario-fisico', require('./modules/inventario-fisico/routes'));
+app.use('/api/alertas', require('./modules/alertas/routes'));
 
 // Manejo de errores
 app.use((err, req, res, next) => {

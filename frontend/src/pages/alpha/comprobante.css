@@ -1,0 +1,23 @@
+.comprobante-acciones { flex-wrap: wrap; margin-bottom: 1rem; }
+.comprobante-datos { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+.comprobante-datos dt { font-weight: 600; }
+.comprobante-documento dd { margin: .25rem 0 0; }
+.comprobante-totales { max-width: 600px; margin-left: auto; }
+.comprobante-totales > div { display: flex; justify-content: space-between; gap: 1rem; padding: .5rem 0; border-bottom: 1px solid #ccc; }
+.comprobante-totales dd { text-align: right; white-space: nowrap; }
+.comprobante-totales > div:last-child { font-weight: bold; font-size: 1.15em; }
+.comprobante-observacion { white-space: pre-wrap; overflow-wrap: anywhere; }
+.comprobante-documento td { overflow-wrap: anywhere; }
+
+@media print {
+    /* Imprime el comprobante sin las acciones ni la cabecera de sesión. */
+    body:has(.comprobante-documento) .erp-encabezado,
+    .comprobante-acciones { display: none; }
+    .comprobante-documento { max-width: none; margin: 0; padding: 0; color: #000; font-size: 9pt; }
+    .comprobante-documento .alpha-tabla { overflow: visible; }
+    .comprobante-documento table { table-layout: fixed; }
+    .comprobante-documento th, .comprobante-documento td { padding: .3rem; }
+    .comprobante-documento th:first-child { width: 25%; }
+    .comprobante-documento thead { display: table-header-group; }
+    .comprobante-documento tr, .comprobante-totales { break-inside: avoid; }
+}

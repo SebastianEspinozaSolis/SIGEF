@@ -1,0 +1,24 @@
+.alpha { max-width: 1200px; margin: 1.5rem auto; padding: 0 1rem; font-family: system-ui, sans-serif; }
+.alpha label { display: flex; flex-direction: column; gap: .3rem; }
+.alpha input, .alpha select { padding: .5rem; font: inherit; }
+.alpha button { padding: .45rem .8rem; margin: .3rem; cursor: pointer; }
+.alpha button:disabled { cursor: default; }
+.alpha-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; padding: 1rem; }
+.alpha-filtros { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1rem 0; }
+.alpha-tabla { overflow-x: auto; }
+.alpha table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+.alpha th, .alpha td { padding: .6rem; text-align: left; border-bottom: 1px solid #ccc; }
+.alpha small, .alpha [role="alert"] { color: #a01818; }
+.alpha nav { display: flex; align-items: center; gap: .5rem; }
+.alpha-critico { color: #a01818; font-weight: bold; }
+.alpha-ejecutivos { grid-column: 1 / -1; }
+.alpha nav.alpha-menu { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1rem; }
+.alpha-menu a { display: flex; flex-direction: column; gap: .5rem; padding: 1.5rem; border: 1px solid #ccc; border-radius: .4rem; }
+.alpha-menu a:hover, .alpha-menu a:focus-visible { background: #f1f5f9; }
+.alpha-menu-pendiente { display: flex; flex-direction: column; gap: .5rem; padding: 1.5rem; border: 1px dashed #ccc; border-radius: .4rem; color: #555; }
+.alpha-alertas { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 1rem; }
+.alpha-alerta { padding: 1rem; border: 1px solid #ccc; border-radius: .4rem; min-width: 0; }
+.alpha-alerta h3 { margin-top: 0; }
+.alpha-alerta ul { padding-left: 1.2rem; overflow-wrap: anywhere; }
+.alpha-alerta li { margin-bottom: .8rem; }
+.alpha-alerta li p { margin: .25rem 0; }

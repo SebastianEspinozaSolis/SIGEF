@@ -6,8 +6,8 @@ import { api } from '../api/cliente';
 // informacion de la sesion del usuario logeado
 const AuthContext = createContext(null);
 
-// Tiempo sin actividad permitido en el ERP web: 20 minutos en milisegundos
-const TIEMPO_INACTIVIDAD = 20 * 60 * 1000;
+// Tiempo sin actividad permitido en el ERP web: 40 minutos en milisegundos
+const TIEMPO_INACTIVIDAD = 40 * 60 * 1000;
 const AVISO_INACTIVIDAD = 'Tu sesión se cerró por inactividad. Vuelve a iniciar sesión.';
 
 export function AuthProvider({ children }) {

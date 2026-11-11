@@ -29,6 +29,22 @@ function validarRut(rut) {
     return dv === esperado;
 }
 
+// Recibe el RUT normalizado y distingue formato de cálculo del verificador.
+function errorRut(rut) {
+    if (!/^\d{7,8}-[\dK]$/.test(rut)) {
+        return 'Escribe el RUT con 7 u 8 números, guion y dígito verificador (0–9 o K)';
+    }
+    if (!validarRut(rut)) return 'El dígito verificador no coincide. Revisa el RUT ingresado';
+    return null;
+}
+
+// Exige prefijo chileno explícito; no elimina letras ni símbolos para hacerlos válidos.
+function normalizarTelefono(valor) {
+    if (typeof valor !== 'string' || !/^\+56[\d -]+$/.test(valor.trim())) return null;
+    const telefono = valor.trim().replace(/[ -]/g, '');
+    return /^\+56\d{9}$/.test(telefono) ? telefono : null;
+}
+
 // Valida que el correo tenga un formato válido y no sea demasiado largo
 function validarEmail(email) {
     return email.length <= 120 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
@@ -52,7 +68,9 @@ function validarPassword(password) {
 module.exports = {
     limpiarTexto,
     normalizarRut,
+    normalizarTelefono,
     validarRut,
+    errorRut,
     validarEmail,
     validarNombre,
     validarPassword,

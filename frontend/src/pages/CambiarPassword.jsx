@@ -34,7 +34,7 @@ export default function CambiarPassword() {
     return (
         <section>
             <h2>Cambiar mi contraseña</h2>
-            <p>La nueva contraseña debe tener al menos 8 caracteres, una letra y un número, y no superar 72 bytes.</p>
+            <p>La nueva contraseña debe tener al menos 8 caracteres, una letra y un número.</p>
             <form onSubmit={enviar}>
                 <label>Contraseña actual
                     <input type="password" autoComplete="current-password" required maxLength={72}
