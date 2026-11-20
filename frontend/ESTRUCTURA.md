@@ -2,6 +2,16 @@
 
 El frontend muestra las pantallas, recibe lo que escribe el usuario y consulta la API del backend.
 
+Un **hook** es una función cuyo nombre comienza por `use` y que comparte lógica de React entre componentes. A diferencia de un componente, no muestra HTML; a diferencia de una utilidad de formato, puede manejar estado (`useState`) y consultas al cambiar datos (`useEffect`). Cada pantalla que usa el hook tiene su propio estado: no se crea una caché ni se mezclan sus resultados.
+
+Por ejemplo, el editor consulta solo si hay un identificador:
+
+```jsx
+const { datos, error, cargando, recargar } = useRegistro(id ? `/api/articulos/${id}` : null);
+```
+
+La pantalla decide si muestra carga, error o formulario. `useListado` añade búsqueda y paginación: al buscar vuelve a la página 1, espera 250 ms antes de consultar y conserva los parámetros existentes de la ruta. Ambos permiten reintentar y descartan respuestas de consultas anteriores al cambiar de ruta, búsqueda o página, o al salir de la pantalla. La presentación, selección y formularios permanecen en cada componente. Los permisos y las reglas de negocio siguen en el backend.
+
 ## Archivos y carpetas principales
 
 | Lugar | Para qué sirve |
@@ -30,6 +40,12 @@ El frontend muestra las pantallas, recibe lo que escribe el usuario y consulta l
 | `api/cliente.js` | Centraliza las peticiones al backend: envía JSON y el token, devuelve datos y comunica errores. |
 | `context/AuthContext.jsx` | Comparte el usuario autenticado, la carga inicial y las funciones de login y logout entre componentes. |
 | `components/` | Contiene piezas reutilizables de la interfaz. |
+| `hooks/` | Lógica reutilizable de React: maneja estado y efectos, sin dibujar elementos de interfaz. |
+| `hooks/useRegistro.js` | Consulta una ruta mediante el cliente API y devuelve datos, error, carga y recarga. Lo utilizan los editores de ficha y artículo; una ruta nula evita consultar al crear. |
+| `hooks/useListado.js` | Comparte búsqueda, página, espera de 250 ms y recarga de los selectores de movimientos, compras pendientes y artículos de documentos. Utiliza useRegistro para consultar. |
+| `utils/movimientos.js` | Comparte nombres de movimientos y el formato de cantidades entre el formulario y el historial, sin modificar cantidades ni reglas de inventario. |
+| `components/ErrorCarga.jsx` | Mensajes de carga fallida: distingue registros inexistentes (404), permite volver y ofrece reintentar errores temporales. |
+| `pages/NoEncontrada.jsx` | Pantalla para URL no definidas, con acceso al inicio mediante la ruta comodín de App. |
 | `components/AlertasInicio.jsx` | Tarjetas del inicio con alertas de stock y facturas, según rol; incluye consulta paginada, recarga y enlaces a registros. |
 | `components/Layout.jsx` | Cabecera común con SIGEF, usuario y opciones de sesión. Su `Outlet` muestra la página hija. |
 | `components/RutaProtegida.jsx` | Comprueba sesión y rol antes de mostrar una página; redirige si no corresponde acceder. |
@@ -81,11 +97,11 @@ Regiones y comunas se consultan en PostgreSQL: `region` y `comuna`. GET `/api/cl
 
 Clientes muestra región, comuna y ciudad y dos secciones independientes: Contactos de proyectos y Contactos de finanzas. Cada sección permite agregar, editar y quitar múltiples contactos con nombre, RUT, cargo, correo y teléfono. Las listas pueden estar vacías; cada contacto agregado debe completarse. Quitar un contacto ya guardado solicita confirmación y se aplica al guardar la ficha. Los IDs y claves de React se conservan por área; una misma persona puede figurar en ambas. El listado muestra las dos listas por separado. La API guarda ficha y ambos grupos de forma atómica. El representante legal aún no se incorpora en esta modificación.
 
-Proveedores incluye dirección, región, comuna y ciudad como campos separados. La opción «Registrar ficha bancaria» habilita banco, tipo de cuenta, número de cuenta y correo para pagos, todos obligatorios cuando se activa. Sin activar la opción se guarda el proveedor sin cuenta; desactivarla al editar solicita confirmación y retira la ficha bancaria al guardar. El número de cuenta se captura como texto. El listado distingue una cuenta completa de «Sin ficha bancaria».
+Proveedores incluye dirección, región, comuna y ciudad como campos separados. La sección «Cuentas bancarias» permite agregar varias cuentas (hasta 50 en el formulario), cada una con banco, tipo, número y correo para pagos obligatorios, además del indicador «Cuenta activa». El tipo mantiene sugerencias y permite texto libre; el número se captura como texto para conservar ceros iniciales. Cada cuenta guardada conserva `id_datos_bancarios` y una clave estable de React: se puede editar o activar/inactivar, pero no eliminar. «Quitar cuenta nueva» solo descarta entradas aún no guardadas. No agregar ninguna envía `cuentas_bancarias: []`. Las cuentas omitidas por una petición se conservan en el backend. El listado muestra todas las cuentas con su estado o «Sin cuentas bancarias».
 
 La sección Ejecutivos comerciales permite agregar, editar y quitar contactos con nombre, RUT, cargo, correo y teléfono. Puede quedar vacía; cada ejecutivo añadido debe estar completo. Quitar uno ya guardado solicita confirmación y se aplica solo al guardar la ficha. Los ejecutivos conservan sus IDs al editar y usan claves estables en React. El listado muestra los datos de ubicación, bancarios y los ejecutivos asociados. No cambia los permisos existentes.
 
-Esta ficha ampliada necesita que la base instalada tenga la definición correspondiente en `schema.sql`; modificar ese archivo no actualiza la base por sí solo. No se generaron migraciones ni se ejecutó SQL en este cambio.
+La versión de múltiples cuentas necesita la nueva definición de `datos_bancarios_proveedor` en la base instalada; modificar `schema.sql` no la actualiza por sí solo. El código no es compatible con la tabla anterior de una sola cuenta hasta adaptar la base. No se generaron migraciones ni se ejecutó SQL en este cambio. Los pagos y la conservación de los datos bancarios usados en cada pago quedan pendientes para su módulo; inactivar no significa pagar ni se produce automáticamente por un pago.
 
 Los listados consultan la API con paginación de 20 y búsqueda tras una espera de 250 ms; descartan respuestas de solicitudes anteriores al cambiar los filtros o salir de la pantalla. Los formularios bloquean envíos mientras guardan y muestran errores generales y por campo. Una falla al recargar el listado se muestra aparte del resultado del guardado.
 

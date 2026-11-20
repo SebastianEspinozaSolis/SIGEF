@@ -27,7 +27,8 @@ async function crearUsuario(datos, idResponsable) {
 
     // Se juntan todos los errores para mostrarlos de una vez, campo por campo
     const errores = {};
-    if (errorRut(rut)) errores.rut = errorRut(rut);
+    const mensajeRut = errorRut(rut);
+    if (mensajeRut) errores.rut = mensajeRut;
     if (!validarNombre(nombres)) errores.nombres = 'Mínimo 2 letras, sin números ni símbolos';
     if (!validarNombre(apellidos)) errores.apellidos = 'Mínimo 2 letras, sin números ni símbolos';
     if (!validarEmail(email)) errores.email = 'Correo inválido (ej: nombre@empresa.cl)';
@@ -51,6 +52,7 @@ async function crearUsuario(datos, idResponsable) {
             [rut, nombres, apellidos, email, hash, id_rol]
         );
         const usuario = r.rows[0];
+        // Registrar auditoria de la creación del usuario
         await registrarAuditoria(client, {
             id_usuario: idResponsable,
             tabla_afectada: 'usuario',
@@ -61,6 +63,7 @@ async function crearUsuario(datos, idResponsable) {
         await client.query('COMMIT');
         return usuario;
     } catch (err) {
+        // Indica que hubo un error y deshace la transacción, para no dejar el usuario creado sin auditoria
         await client.query('ROLLBACK');
         if (err.code === '23505') {
             throw new ErrorHttp(409, 'El RUT o el correo ya están registrados');

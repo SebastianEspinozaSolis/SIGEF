@@ -7,6 +7,7 @@ async function listarRegiones() {
     return resultado.rows;
 }
 
+
 async function listarComunas(idRegion) {
     const id = idPositivo(idRegion);
     const resultado = await pool.query(

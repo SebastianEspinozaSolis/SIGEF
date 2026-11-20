@@ -45,8 +45,7 @@ async function obtener(idInventario) {
     const r = await pool.query(
         `SELECT i.*, ${resumen('i')}, COALESCE((
             SELECT json_agg(fila ORDER BY fila.id_articulo) FROM (
-                SELECT d.*, (d.stock_fisico - d.stock_sistema)::numeric(12,3) AS diferencia, a.codigo_interno, a.nombre, a.unidad_medida,
-                       (d.stock_fisico <> d.stock_sistema) AS tiene_diferencia
+                SELECT d.*, (d.stock_fisico - d.stock_sistema)::numeric(12,3) AS diferencia, a.codigo_interno, a.nombre, a.unidad_medida
                 FROM detalle_inventario_fisico d JOIN articulo a ON a.id_articulo = d.id_articulo
                 WHERE d.id_inventario = i.id_inventario
             ) fila
@@ -81,8 +80,10 @@ async function crear(idResponsable) {
 }
 
 // El bloqueo de la cabecera impide guardar un conteo mientras se finaliza el inventario.
-async function bloquearEnProceso(client, id) {
-    const r = await client.query(`SELECT *, ${resumen('inventario_fisico')} FROM inventario_fisico WHERE id_inventario = $1 FOR UPDATE`, [id]);
+async function bloquearEnProceso(client, id, incluirResumen = false) {
+    // Al finalizar se conserva el resumen anterior para la auditoría; guardar no lo necesita.
+    const columnasResumen = incluirResumen ? `, ${resumen('inventario_fisico')}` : '';
+    const r = await client.query(`SELECT *${columnasResumen} FROM inventario_fisico WHERE id_inventario = $1 FOR UPDATE`, [id]);
     if (!r.rows[0]) throw new ErrorHttp(404, 'Inventario no encontrado');
     if (r.rows[0].estado !== 'En proceso') throw new ErrorHttp(409, 'El inventario ya está finalizado');
     return r.rows[0];
@@ -152,7 +153,7 @@ async function finalizar(idInventario, idResponsable) {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        const anterior = await bloquearEnProceso(client, id);
+        const anterior = await bloquearEnProceso(client, id, true);
         // Finalizar únicamente cierra el conteo; no aplica las diferencias al inventario real.
         const r = await client.query(`UPDATE inventario_fisico SET estado = 'Finalizado' WHERE id_inventario = $1 RETURNING *, ${resumen('inventario_fisico')}`, [id]);
         const inventario = r.rows[0];

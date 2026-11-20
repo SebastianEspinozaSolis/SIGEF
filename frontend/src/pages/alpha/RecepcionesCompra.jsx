@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/cliente';
+import ErrorCarga from '../../components/ErrorCarga';
 import { tiposDocumento } from './configuracionFichas';
 import './alpha.css';
 
@@ -38,7 +39,7 @@ function Listado() {
 export function Recepcion({id, idArticulo, idLinea, onConfirmado}) {
     const [doc,setDoc]=useState(null);
     const [error,setError]=useState('');
-    const [errorCarga,setErrorCarga]=useState('');
+    const [errorCarga,setErrorCarga]=useState(null);
     const [version,setVersion]=useState(0);
     const [entradas,setEntradas]=useState({});
     const [observaciones,setObservaciones]=useState('');
@@ -46,8 +47,8 @@ export function Recepcion({id, idArticulo, idLinea, onConfirmado}) {
     const [ok,setOk]=useState('');
     useEffect(()=>{
         let vigente=true;
-        api(`/api/recepciones-compra/${id}`).then(d=>{if(vigente){setDoc(d);setErrorCarga('');}})
-            .catch(e=>{if(vigente)setErrorCarga(e.message);});
+        api(`/api/recepciones-compra/${id}`).then(d=>{if(vigente){setDoc(d);setErrorCarga(null);}})
+            .catch(e=>{if(vigente)setErrorCarga(e);});
         return ()=>{vigente=false;};
     },[id,version]);
     async function confirmar(e) {
@@ -65,7 +66,8 @@ export function Recepcion({id, idArticulo, idLinea, onConfirmado}) {
         finally{setGuardando(false);}
     }
     return <section className="alpha">{!idArticulo && <><Link to="/alpha/recepciones-compra">Volver a compras</Link><h1>Recepcionar materiales</h1></>}
-        {errorCarga?<p role="alert">{errorCarga}<button onClick={()=>setVersion(v=>v+1)}>Reintentar</button></p>:!doc?<p role="status">Cargando…</p>:<>
+        {errorCarga?<ErrorCarga error={errorCarga} noEncontrado="Documento de compra no encontrado."
+            volver="/alpha/recepciones-compra" etiqueta="Volver a compras" reintentar={()=>setVersion(v=>v+1)} />:!doc?<p role="status">Cargando…</p>:<>
             <h2>{doc.razon_social} — {doc.rut_proveedor}</h2><p>{tiposDocumento.find(([v])=>v===doc.tipo_documento)?.[1]} {doc.folio}</p>
             <p>Marca los materiales que llegaron e indica cuánto recibiste. Solo la confirmación aumenta existencias.</p>
             {ok&&<p role="status">{ok}</p>}{error&&<p role="alert">{error}</p>}

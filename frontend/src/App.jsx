@@ -5,6 +5,7 @@ import Inicio from './pages/Inicio'; // Página de inicio
 import RutaProtegida from './components/RutaProtegida'; // Componente que protege rutas según sesión y roles
 import Layout from './components/Layout'; // Componente de layout que envuelve las páginas protegidas
 import { ROLES } from './roles'; // Constantes de roles de usuario
+import NoEncontrada from './pages/NoEncontrada';
 
 
 // Se descargan al visitar una ruta permitida, sin cargar todos los módulos al iniciar.
@@ -66,6 +67,7 @@ export default function App() {
           element={<RutaProtegida roles={[ROLES.ADMIN]}><Auditoria /></RutaProtegida>}
         />
       </Route>
+      <Route path="*" element={<NoEncontrada />} />
     </Routes>
   );
 }

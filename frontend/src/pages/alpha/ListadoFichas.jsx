@@ -46,15 +46,17 @@ export default function ListadoFichas({ tipo }) {
                 <p>{datos.total} registros encontrados</p>
                 <div className="alpha-tabla"><table>
                     <thead><tr>{campos.map(([campo, etiqueta]) => <th key={campo}>{etiqueta}</th>)}{tipo === 'proveedores' && <th>Ejecutivos comerciales</th>}
-                        {tipo === 'proveedores' && <th>Ficha bancaria</th>}
+                        {tipo === 'proveedores' && <th>Cuentas bancarias</th>}
                         {tipo === 'clientes' && areasCliente.map(([lista, tituloArea]) => <th key={lista}>{tituloArea}</th>)}<th>Acciones</th></tr></thead>
                     <tbody>{datos.registros.map((registro) => <tr key={registro[id]}>
                         {campos.map(([campo]) => <td key={campo}>{registro[campo === 'id_region' ? 'region' : campo === 'id_comuna' ? 'comuna' : campo] || '—'}</td>)}
                         {tipo === 'proveedores' && <td>{registro.ejecutivos?.length ? <ul>
                             {registro.ejecutivos.map((e) => <li key={e.id_ejecutivo}>{e.nombre} — {e.rut} — {e.cargo} — {e.email} — {e.telefono}</li>)}
                         </ul> : 'Sin ejecutivos'}</td>}
-                        {tipo === 'proveedores' && <td>{registro.banco ? <dl>{camposBanco.map(([campo, etiqueta]) =>
-                            <div key={campo}><dt>{etiqueta}</dt><dd>{registro[campo]}</dd></div>)}</dl> : 'Sin ficha bancaria'}</td>}
+                        {tipo === 'proveedores' && <td>{registro.cuentas_bancarias?.length ? <ul>{registro.cuentas_bancarias.map((cuenta) =>
+                            <li key={cuenta.id_datos_bancarios}><strong>{cuenta.activo ? 'Activa' : 'Inactiva'}</strong>
+                                <dl>{camposBanco.map(([campo, etiqueta]) => <div key={campo}><dt>{etiqueta}</dt><dd>{cuenta[campo]}</dd></div>)}</dl>
+                            </li>)}</ul> : 'Sin cuentas bancarias'}</td>}
                         {tipo === 'clientes' && areasCliente.map(([lista]) => <td key={lista}>{registro[lista]?.length ? <ul>
                             {registro[lista].map((c) => <li key={c.id_contacto}>{c.nombre} — {c.rut} — {c.cargo} — {c.email} — {c.telefono}</li>)}
                         </ul> : 'Sin contactos'}</td>)}
@@ -65,7 +67,7 @@ export default function ListadoFichas({ tipo }) {
                 <nav aria-label="Paginación">
                     <button disabled={pagina <= 1} onClick={() => { cambiarConsulta(busqueda, pagina - 1); }}>Anterior</button>
                     <span>Página {pagina}</span>
-                    <button disabled={pagina * 20 >= datos.total} onClick={() => { cambiarConsulta(busqueda, pagina + 1); }}>Siguiente</button>
+                    <button disabled={pagina * datos.limite >= datos.total} onClick={() => { cambiarConsulta(busqueda, pagina + 1); }}>Siguiente</button>
                 </nav>
             </>}
     </section>;

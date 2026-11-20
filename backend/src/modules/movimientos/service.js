@@ -215,7 +215,7 @@ async function registrar(idArticulo, datos, responsable) {
             const usuario=await client.query(`SELECT u.id_usuario,r.nombre_rol FROM usuario u JOIN rol r USING(id_rol)
                 WHERE u.id_usuario=$1 AND u.estado='Activo' FOR SHARE OF u`,[solicitud.id_usuario_receptor]);
             if(!usuario.rows.length)throw new ErrorHttp(400,'El receptor debe ser un usuario activo');
-            if(solicitud.tipo_movimiento==='USO_INTERNO'&&usuario.rows[0].nombre_rol!==config.roles.TECNICO)throw new ErrorHttp(400,'Selecciona un técnico activo para la asignación');
+            if(usuario.rows[0].nombre_rol!==config.roles.TECNICO)throw new ErrorHttp(400,'Selecciona un técnico activo para la asignación');
             const recepcion=await client.query('INSERT INTO recepcion_material (id_usuario_receptor) VALUES ($1) RETURNING id_recepcion',[solicitud.id_usuario_receptor]);
             idRecepcion=recepcion.rows[0].id_recepcion;
         }

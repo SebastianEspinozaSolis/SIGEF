@@ -195,7 +195,7 @@ export default function Articulos({ soloFormulario = false, registroInicial = nu
             </table></div>
             {datos.registros.length === 0 && <p>No hay artículos para estos filtros.</p>}
             <nav aria-label="Paginación"><button disabled={pagina <= 1} onClick={() => { setCargando(true); setPagina((valor) => valor - 1); }}>Anterior</button>
-                <span>Página {pagina}</span><button disabled={pagina * 20 >= datos.total} onClick={() => { setCargando(true); setPagina((valor) => valor + 1); }}>Siguiente</button>
+                <span>Página {pagina}</span><button disabled={pagina * datos.limite >= datos.total} onClick={() => { setCargando(true); setPagina((valor) => valor + 1); }}>Siguiente</button>
             </nav>
         </>}
         </>}

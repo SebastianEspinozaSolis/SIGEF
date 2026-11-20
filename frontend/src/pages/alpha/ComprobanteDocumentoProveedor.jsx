@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/cliente';
+import ErrorCarga from '../../components/ErrorCarga';
 import { tiposDocumento } from './configuracionFichas';
 import './alpha.css';
 import './comprobante.css';
@@ -23,13 +24,15 @@ export default function ComprobanteDocumentoProveedor() {
         let vigente = true;
         api(`/api/documentos-proveedor/${proveedor}/${id}`)
             .then(documento => { if (vigente) setResultado({ clave, documento }); })
-            .catch(error => { if (vigente) setResultado({ clave, error: error.message }); });
+            .catch(error => { if (vigente) setResultado({ clave, error }); });
         return () => { vigente = false; };
     }, [proveedor, id, version, clave]);
 
     if (resultado?.clave !== clave) return <p role="status">Cargando comprobante…</p>;
-    if (resultado.error) return <section className="alpha"><p role="alert">{resultado.error}</p>
-        <button onClick={() => setVersion(v => v + 1)}>Reintentar</button> <Link to={regreso}>Volver al listado</Link></section>;
+    if (resultado.error) return <ErrorCarga error={resultado.error} noEncontrado="Documento no encontrado."
+        volver={resultado.error.status === 404 ? '/alpha/proveedores' : regreso}
+        etiqueta={resultado.error.status === 404 ? 'Volver a proveedores' : 'Volver al listado'}
+        reintentar={() => setVersion(v => v + 1)} />;
 
     const d = resultado.documento;
     const tipo = tiposDocumento.find(([valor]) => valor === d.tipo_documento)?.[1] || d.tipo_documento;

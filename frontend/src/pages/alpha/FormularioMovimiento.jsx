@@ -1,11 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import useListado from '../../hooks/useListado';
 import { api } from '../../api/cliente';
 import { useAuth } from '../../context/AuthContext';
-
-// Quita ceros decimales sobrantes sin redondear la cantidad.
-function cantidadVisible(valor) { return String(valor).replace(/(\.\d*?[1-9])0+$|\.0+$/, '$1'); }
-
-const nombres={INGRESO:'Ingreso',EGRESO:'Egreso',MERMA:'Merma',AJUSTE:'Ajuste',USO_INTERNO:'Uso interno',DEVOLUCION_PROVEEDOR:'Devolución a proveedor',REVERSA:'Reversa'};
+import { cantidadVisible, nombresMovimiento as nombres } from '../../utils/movimientos';
 export default function FormularioMovimiento({tipo,unidad,idArticulo,onConfirmado}) {
     const {usuario}=useAuth();
     const almacenamiento=`movimiento-${usuario.id_usuario}-${idArticulo}-${tipo}`;
@@ -76,31 +73,18 @@ export default function FormularioMovimiento({tipo,unidad,idArticulo,onConfirmad
     </form>;
 }
 function SelectorDatos({url,campoId,etiqueta,valor,seleccionar,texto}) {
-    const [q,setQ]=useState('');
-    const [pagina,setPagina]=useState(1);
-    const [version,setVersion]=useState(0);
-    const [resultado,setResultado]=useState(null);
-    const clave=`${url}-${q}-${pagina}-${version}`;
-    useEffect(()=>{
-        let vigente=true;
-        const parametros=new URLSearchParams({q,pagina});
-        const timer=setTimeout(()=>api(`${url}${url.includes('?')?'&':'?'}${parametros}`)
-            .then(datos=>{if(vigente)setResultado({clave,datos});})
-            .catch(e=>{if(vigente)setResultado({clave,error:e.message});}),250);
-        return ()=>{vigente=false;clearTimeout(timer);};
-    },[url,q,pagina,version,clave]);
-    const vigente=resultado?.clave===clave;
-    const lista=vigente&&resultado.datos?resultado.datos.registros:[];
+    const { q, buscar, pagina, setPagina, datos, error, cargando, recargar } = useListado(url);
+    const lista=datos?.registros || [];
     const opciones=valor&&!lista.some(d=>d[campoId]===valor[campoId])?[valor,...lista]:lista;
     return <div>
-        <label>Buscar {etiqueta.toLowerCase()}<input type="search" maxLength={150} value={q} onChange={e=>{setQ(e.target.value);setPagina(1);}} /></label>
-        <label>{etiqueta} *<select value={valor?.[campoId]||''} required disabled={!vigente||Boolean(resultado?.error)} onChange={e=>seleccionar(opciones.find(d=>String(d[campoId])===e.target.value)||null)}>
+        <label>Buscar {etiqueta.toLowerCase()}<input type="search" maxLength={150} value={q} onChange={e=>{buscar(e.target.value);}} /></label>
+        <label>{etiqueta} *<select value={valor?.[campoId]||''} required disabled={cargando||Boolean(error)} onChange={e=>seleccionar(opciones.find(d=>String(d[campoId])===e.target.value)||null)}>
             <option value="">Selecciona una opción</option>{opciones.map(d=><option key={d[campoId]} value={d[campoId]}>{texto(d)}</option>)}
         </select></label>
-        {!vigente?<p role="status">Cargando…</p>:resultado.error?<p role="alert">{resultado.error}<button type="button" onClick={()=>setVersion(v=>v+1)}>Reintentar</button></p>:<>
+        {cargando?<p role="status">Cargando…</p>:error?<p role="alert">{error.message}<button type="button" onClick={recargar}>Reintentar</button></p>:<>
             {!lista.length&&<p>No hay opciones disponibles.</p>}
             <nav aria-label={`Páginas de ${etiqueta.toLowerCase()}`}><button type="button" disabled={pagina<=1} onClick={()=>setPagina(p=>p-1)}>Anterior</button>
-                <span>Página {pagina}</span><button type="button" disabled={pagina*resultado.datos.limite>=resultado.datos.total} onClick={()=>setPagina(p=>p+1)}>Siguiente</button></nav>
+                <span>Página {pagina}</span><button type="button" disabled={pagina*datos.limite>=datos.total} onClick={()=>setPagina(p=>p+1)}>Siguiente</button></nav>
         </>}
     </div>;
 }

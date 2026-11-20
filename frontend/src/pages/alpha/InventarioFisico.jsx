@@ -56,7 +56,7 @@ export default function InventarioFisico() {
             {datos.registros.length === 0 && <p>No hay conteos para este filtro.</p>}
             <nav aria-label="Paginación de inventarios">
                 <button disabled={pagina <= 1} onClick={() => { setCargando(true); setPagina((p) => p - 1); }}>Anterior</button>
-                <span>Página {pagina}</span><button disabled={pagina * 20 >= datos.total} onClick={() => { setCargando(true); setPagina((p) => p + 1); }}>Siguiente</button>
+                <span>Página {pagina}</span><button disabled={pagina * datos.limite >= datos.total} onClick={() => { setCargando(true); setPagina((p) => p + 1); }}>Siguiente</button>
             </nav>
         </>}
     </section>;

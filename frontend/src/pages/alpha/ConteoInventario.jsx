@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/cliente';
+import ErrorCarga from '../../components/ErrorCarga';
 import './alpha.css';
 
 export default function ConteoInventario() {
@@ -11,7 +12,7 @@ export default function ConteoInventario() {
 
 function DetalleConteo({ id }) {
     const [inventario, setInventario] = useState(null);
-    const [errorCarga, setErrorCarga] = useState('');
+    const [errorCarga, setErrorCarga] = useState(null);
     const [cargando, setCargando] = useState(true);
     const [version, setVersion] = useState(0);
     const [busqueda, setBusqueda] = useState('');
@@ -30,7 +31,7 @@ function DetalleConteo({ id }) {
         let vigente = true;
         api(`/api/inventario-fisico/${id}`)
             .then((r) => { if (vigente) setInventario(r); })
-            .catch((err) => { if (vigente) setErrorCarga(err.message); })
+            .catch((err) => { if (vigente) setErrorCarga(err); })
             .finally(() => { if (vigente) setCargando(false); });
         return () => { vigente = false; };
     }, [id, version]);
@@ -91,8 +92,10 @@ function DetalleConteo({ id }) {
         <Link to="/alpha/inventario-fisico">Volver a inventario físico</Link>
         <h1>Conteo #{id}</h1>
         {cargando && <p role="status">Cargando conteo…</p>}
-        {errorCarga && <p role="alert">{errorCarga} <button onClick={() => { setCargando(true); setErrorCarga(''); setVersion((v) => v + 1); }}>Reintentar</button></p>}
-        {inventario && <>
+        {errorCarga && <ErrorCarga error={errorCarga} noEncontrado="Conteo no encontrado."
+            volver="/alpha/inventario-fisico" etiqueta="Volver a inventario físico"
+            reintentar={() => { setCargando(true); setErrorCarga(null); setVersion((v) => v + 1); }} />}
+        {!errorCarga && inventario && <>
             <p>Estado: <strong>{inventario.estado}</strong> · Contados: {inventario.total_contados ?? 0} · Con diferencia: {inventario.total_con_diferencia ?? 0}</p>
             <p>Cuenta solo lo que hay en bodega, sin incluir lo asignado a técnicos. Diferencia = contado en bodega − esperado en bodega.</p>
             {enProceso && <>
@@ -111,7 +114,7 @@ function DetalleConteo({ id }) {
                     {articulos.registros.length === 0 && <p>No hay artículos para esta búsqueda.</p>}
                     <nav aria-label="Paginación de artículos para contar">
                         <button disabled={pagina <= 1} onClick={() => { setBuscando(true); setPagina((p) => p - 1); }}>Anterior</button>
-                        <span>Página {pagina}</span><button disabled={pagina * 20 >= articulos.total} onClick={() => { setBuscando(true); setPagina((p) => p + 1); }}>Siguiente</button>
+                        <span>Página {pagina}</span><button disabled={pagina * articulos.limite >= articulos.total} onClick={() => { setBuscando(true); setPagina((p) => p + 1); }}>Siguiente</button>
                     </nav>
                 </>}
                 {seleccionado && <form onSubmit={guardar}>

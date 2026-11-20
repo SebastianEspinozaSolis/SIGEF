@@ -3,10 +3,17 @@ const { roles } = require('../../config');
 const ErrorHttp = require('../../utils/ErrorHttp');
 const { filtrosListado } = require('../../utils/catalogos');
 
+// Listado de alertas de stock y vencimiento de documentos tributarios
 async function listar(tipo, rol, filtros = {}) {
+    // lista de alertas validas
     if (!['stock', 'por-vencer', 'vencidas'].includes(tipo)) throw new ErrorHttp(400, 'Tipo de alerta inválido');
+
+    // solo los roles ADMIN y ADMINISTRACION pueden consultar alertas de vencimiento de documentos
+    // Bodega se le permite de stock
     if (![roles.ADMIN, roles.ADMINISTRACION, roles.BODEGA].includes(rol)
         || (rol === roles.BODEGA && tipo !== 'stock')) throw new ErrorHttp(403, 'No tienes permiso para consultar estas alertas');
+
+    // Se usa un límite de 5 registros por página, para no saturar la vista de alertas.
     const { pagina, limite, offset } = filtrosListado({ pagina: filtros.pagina, limite: 5 });
     // Se usa la misma regla de mínimo del catálogo; solo participan artículos activos.
     const hoy = `(CURRENT_TIMESTAMP AT TIME ZONE 'America/Santiago')::date`;

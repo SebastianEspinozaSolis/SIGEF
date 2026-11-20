@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -8,17 +8,25 @@ export default function Login() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [ingresando, setIngresando] = useState(false);
+    const envioEnCurso = useRef(false);
 
     // Si ya hay sesión, no tiene sentido ver el login
     if (usuario) return <Navigate to="/" replace />;
 
     async function enviar(e) {
         e.preventDefault();
+        if (envioEnCurso.current) return;
+        envioEnCurso.current = true;
+        setIngresando(true);
         setError('');
         try {
             await login(email, password);   // al guardar el usuario, la línea de arriba redirige sola
         } catch (err) {
             setError(err.message);
+        } finally {
+            envioEnCurso.current = false;
+            setIngresando(false);
         }
     }
 
@@ -29,7 +37,7 @@ export default function Login() {
             {mensajeSesion && <p role="status">{mensajeSesion}</p>}
             <input type="email" maxLength={120} placeholder="Correo" value={email} onChange={(e) => setEmail(e.target.value)} />
             <input type="password" maxLength={72} placeholder="Contraseña" value={password} onChange={(e) => setPassword(e.target.value)} />
-            <button type="submit">Entrar</button>
+            <button type="submit" disabled={ingresando}>{ingresando ? 'Ingresando…' : 'Entrar'}</button>
             {error && <p>{error}</p>}
         </form>
     );

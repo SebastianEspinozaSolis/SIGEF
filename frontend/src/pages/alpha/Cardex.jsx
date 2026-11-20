@@ -1,17 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/cliente';
+import ErrorCarga from '../../components/ErrorCarga';
 import './alpha.css';
 import IngresoArticulo from './IngresoArticulo';
 import FormularioMovimiento from './FormularioMovimiento';
-
-function cantidadVisible(valor) { return String(valor).replace(/(\.\d*?[1-9])0+$|\.0+$/, '$1'); }
-
-const tiposMovimiento = [
-    ['INGRESO', 'Ingreso'], ['EGRESO', 'Egreso'], ['MERMA', 'Merma'],
-    ['DEVOLUCION_PROVEEDOR', 'Devolución a proveedor'], ['AJUSTE', 'Ajuste'],
-    ['USO_INTERNO', 'Uso interno'], ['REVERSA', 'Reversa'],
-];
+import { cantidadVisible, tiposMovimiento } from '../../utils/movimientos';
 
 export default function Cardex() {
     const { id } = useParams();
@@ -26,12 +20,12 @@ function HistorialArticulo({ id }) {
     const [pagina, setPagina] = useState(1);
     const [version, setVersion] = useState(0);
     const [cargando, setCargando] = useState(true);
-    const [error, setError] = useState('');
+    const [error, setError] = useState(null);
     useEffect(() => {
         let vigente = true;
         api(`/api/articulos/${id}/cardex?${new URLSearchParams({ pagina })}`)
             .then((r) => { if (vigente) setDatos(r); })
-            .catch((err) => { if (vigente) setError(err.message); })
+            .catch((err) => { if (vigente) setError(err); })
             .finally(() => { if (vigente) setCargando(false); });
         return () => { vigente = false; };
     }, [id, pagina, version]);
@@ -40,7 +34,9 @@ function HistorialArticulo({ id }) {
             ? <button type="button" onClick={() => setMostrarFormulario(false)}>Volver al historial</button>
             : <Link to="/alpha/articulos">Volver a artículos</Link>}
         <h1>{mostrarFormulario ? 'Nuevo movimiento' : 'Movimientos del artículo'}</h1>
-        {error && <p role="alert">{error} <button onClick={() => { setCargando(true); setError(''); setVersion((v) => v + 1); }}>Reintentar</button></p>}
+        {error && <ErrorCarga error={error} noEncontrado="Artículo no encontrado."
+            volver="/alpha/articulos" etiqueta="Volver a artículos"
+            reintentar={() => { setCargando(true); setError(null); setVersion((v) => v + 1); }} />}
         {cargando ? <p role="status">Cargando movimientos…</p> : !error && datos && <>
             <h2>{datos.articulo.codigo_interno} — {datos.articulo.nombre}</h2>
             {!mostrarFormulario && <>
@@ -57,7 +53,7 @@ function HistorialArticulo({ id }) {
                 </label>
                 {/* Cambiar de tipo reinicia los campos específicos para evitar mezclar sus datos. */}
                 <BorradorMovimiento key={tipo} tipo={tipo} unidad={datos.articulo.unidad_medida} idArticulo={id} onConfirmado={() => {
-                    setMostrarFormulario(false); setCargando(true); setPagina(1); setError(''); setVersion(v => v + 1);
+                    setMostrarFormulario(false); setCargando(true); setPagina(1); setError(null); setVersion(v => v + 1);
                 }} />
             </section>}
             {!mostrarFormulario && <>
@@ -74,7 +70,7 @@ function HistorialArticulo({ id }) {
             {datos.registros.length === 0 && <p>Este artículo aún no tiene movimientos registrados.</p>}
             <nav aria-label="Paginación de movimientos">
                 <button disabled={pagina <= 1} onClick={() => { setCargando(true); setPagina((p) => p - 1); }}>Anterior</button>
-                <span>Página {pagina}</span><button disabled={pagina * 20 >= datos.total} onClick={() => { setCargando(true); setPagina((p) => p + 1); }}>Siguiente</button>
+                <span>Página {pagina}</span><button disabled={pagina * datos.limite >= datos.total} onClick={() => { setCargando(true); setPagina((p) => p + 1); }}>Siguiente</button>
             </nav>
             </>}
         </>}

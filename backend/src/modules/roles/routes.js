@@ -3,7 +3,7 @@ const config = require('../../config');
 const { autenticar, autorizar } = require('../../middlewares/auth');
 const servicio = require('./service');
 
-// GET /api/roles: solo el administrador consulta los roles para crear usuarios
+// GET /api/roles: solo el administrador general consulta los roles para crear usuarios
 router.get('/', autenticar, autorizar(config.roles.ADMIN), async (req, res) => {
     const roles = await servicio.listarRoles();
     res.json(roles);

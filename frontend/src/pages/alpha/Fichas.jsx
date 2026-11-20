@@ -7,7 +7,6 @@ import './alpha.css';
 
 // Las tres fichas comparten formulario y listado, pero conservan sus campos propios.
 import { fichas, camposEjecutivo, areasCliente, camposBanco } from './configuracionFichas';
-const bancoVacio = { banco: '', tipo_cuenta: '', numero_cuenta: '', email_pagos: '' };
 
 export default function Fichas({ tipo, registroInicial = null, soloFormulario = false }) {
     const navigate = useNavigate();
@@ -20,8 +19,7 @@ export default function Fichas({ tipo, registroInicial = null, soloFormulario = 
     const vacio = () => Object.fromEntries(campos.map(([campo]) => [campo, '']));
     const [form, setForm] = useState(() => registroInicial ? Object.fromEntries(campos.map(([campo]) => [campo, registroInicial[campo] ?? ''])) : vacio());
     const [ejecutivos, setEjecutivos] = useState(() => (registroInicial?.ejecutivos || []).map((e) => ({ ...e, clave: `guardado-${e.id_ejecutivo}` })));
-    const [conBanco, setConBanco] = useState(() => camposBanco.some(([campo]) => Boolean(registroInicial?.[campo])));
-    const [banco, setBanco] = useState(() => Object.fromEntries(camposBanco.map(([campo]) => [campo, registroInicial?.[campo] ?? ''])));
+    const [cuentasBancarias, setCuentasBancarias] = useState(() => (registroInicial?.cuentas_bancarias || []).map((c) => ({ ...c, clave: `cuenta-${c.id_datos_bancarios}` })));
     const [contactosCliente, setContactosCliente] = useState(() => Object.fromEntries(areasCliente.map(([lista]) => [lista, (registroInicial?.[lista] || []).map((c) => ({ ...c, clave: `${lista}-${c.id_contacto}` }))])));
     const siguienteEjecutivo = useRef(0);
     const [editando, setEditando] = useState(registroInicial?.[id] ?? null);
@@ -67,7 +65,7 @@ export default function Fichas({ tipo, registroInicial = null, soloFormulario = 
     }, [tipo, versionRegiones]);
 
     useEffect(() => {
-        if (soloFormulario) return;
+        if (tipo !== 'categorias' || soloFormulario) return;
         let vigente = true;
         // Espera breve para buscar al escribir y descarta respuestas antiguas.
         const temporizador = setTimeout(() => {
@@ -98,7 +96,7 @@ export default function Fichas({ tipo, registroInicial = null, soloFormulario = 
         setComunas({ region: '', lista: [] }); setErrorComunas('');
         setForm(vacio()); setEditando(null); setErrores({}); setError('');
         setEjecutivos([]);
-        setConBanco(false); setBanco(bancoVacio);
+        setCuentasBancarias([]);
         setContactosCliente({ contactos_proyecto: [], contactos_finanzas: [] });
     }
 
@@ -110,7 +108,10 @@ export default function Fichas({ tipo, registroInicial = null, soloFormulario = 
         try {
             await api(`/api/${tipo}${editando === null ? '' : `/${editando}`}`, {
                 method: editando === null ? 'POST' : 'PUT', body: tipo === 'proveedores'
-                    ? { ...ficha, ...(conBanco ? banco : bancoVacio), ejecutivos: ejecutivos.map((e) => ({
+                    ? { ...ficha, cuentas_bancarias: cuentasBancarias.map((c) => ({
+                        ...(c.id_datos_bancarios !== undefined && { id_datos_bancarios: c.id_datos_bancarios }),
+                        ...Object.fromEntries(camposBanco.map(([campo]) => [campo, c[campo]])), activo: c.activo,
+                    })), ejecutivos: ejecutivos.map((e) => ({
                         ...(e.id_ejecutivo !== undefined && { id_ejecutivo: e.id_ejecutivo }),
                         nombre: e.nombre, rut: e.rut, cargo: e.cargo, email: e.email, telefono: e.telefono,
                     })) } : tipo === 'clientes' ? { ...ficha, ...Object.fromEntries(areasCliente.map(([lista]) =>
@@ -137,8 +138,7 @@ export default function Fichas({ tipo, registroInicial = null, soloFormulario = 
         setEditando(registro[id]);
         setForm(Object.fromEntries(campos.map(([campo]) => [campo, registro[campo] ?? ''])));
         setEjecutivos((registro.ejecutivos || []).map((e) => ({ ...e, clave: `guardado-${e.id_ejecutivo}` })));
-        setConBanco(camposBanco.some(([campo]) => Boolean(registro[campo])));
-        setBanco(Object.fromEntries(camposBanco.map(([campo]) => [campo, registro[campo] ?? ''])));
+        setCuentasBancarias((registro.cuentas_bancarias || []).map((c) => ({ ...c, clave: `cuenta-${c.id_datos_bancarios}` })));
         setContactosCliente(Object.fromEntries(areasCliente.map(([lista]) => [lista,
             (registro[lista] || []).map((c) => ({ ...c, clave: `${lista}-${c.id_contacto}` }))])));
         setErrores({}); setError(''); setOk('');
@@ -150,6 +150,20 @@ export default function Fichas({ tipo, registroInicial = null, soloFormulario = 
         const ejecutivo = { clave: `nuevo-${siguienteEjecutivo.current}`, nombre: '', rut: '', cargo: '', email: '', telefono: '' };
         setEjecutivos((anteriores) => [...anteriores, ejecutivo]);
         setErrores({});
+    }
+
+    function agregarCuenta() {
+        modificado.current = true;
+        siguienteEjecutivo.current += 1;
+        setCuentasBancarias((anteriores) => [...anteriores, {
+            clave: `cuenta-nueva-${siguienteEjecutivo.current}`,
+            ...Object.fromEntries(camposBanco.map(([campo]) => [campo, ''])), activo: true,
+        }]);
+        setErrores({});
+    }
+
+    function cambiarCuenta(clave, campo, valor) {
+        setCuentasBancarias((anteriores) => anteriores.map((c) => c.clave === clave ? { ...c, [campo]: valor } : c));
     }
 
     function cambiarEjecutivo(clave, campo, valor) {
@@ -203,27 +217,39 @@ export default function Fichas({ tipo, registroInicial = null, soloFormulario = 
                         </label>
                     ))}
                     {tipo === 'proveedores' && <div className="alpha-ejecutivos">
-                        <h3>Datos bancarios</h3>
-                        <label><span><input type="checkbox" checked={conBanco} onChange={(e) => {
-                            const marcado = e.target.checked;
-                            if (!marcado && editando !== null && !window.confirm('Al guardar se retirará la ficha bancaria del proveedor. ¿Continuar?')) return;
-                            setConBanco(marcado);
-                        }} /> Registrar ficha bancaria</span></label>
-                        {conBanco && <div className="alpha-campos">{camposBanco.map(([campo, etiqueta, maximo]) => <label key={campo}>
-                            {etiqueta} *<input type={campo === 'email_pagos' ? 'email' : 'text'} value={banco[campo]} required maxLength={maximo}
-                                list={campo === 'tipo_cuenta' ? 'sugerencias-tipo-cuenta' : undefined}
-                                aria-invalid={Boolean(errores[campo])} onChange={(e) => setBanco((anterior) => ({ ...anterior, [campo]: e.target.value }))} />
-                            {campo === 'tipo_cuenta' && <>
-                                {/* Son sugerencias; se permite escribir un tipo diferente. */}
-                                <datalist id="sugerencias-tipo-cuenta">
-                                    <option value="Cuenta Corriente" />
-                                    <option value="Cuenta Vista" />
-                                    <option value="Cuenta Ahorro" />
-                                </datalist>
-                                <small>Puedes elegir una sugerencia o escribir otro tipo de cuenta.</small>
-                            </>}
-                            {errores[campo] && <small>{errores[campo]}</small>}
-                        </label>)}</div>}
+                        <h3>Cuentas bancarias</h3>
+                        {!cuentasBancarias.length && <p>Sin cuentas bancarias.</p>}
+                        {errores.cuentas_bancarias && <p role="alert">{errores.cuentas_bancarias}</p>}
+                        {/* Son sugerencias; se permite escribir un tipo diferente. */}
+                        <datalist id="sugerencias-tipo-cuenta">
+                            <option value="Cuenta Corriente" />
+                            <option value="Cuenta Vista" />
+                            <option value="Cuenta Ahorro" />
+                        </datalist>
+                        {cuentasBancarias.map((cuenta, indice) => <fieldset key={cuenta.clave}>
+                            <legend>Cuenta {indice + 1} — {cuenta.activo ? 'Activa' : 'Inactiva'}</legend>
+                            <div className="alpha-campos">{camposBanco.map(([campo, etiqueta, maximo]) => {
+                                const claveError = `cuentas_bancarias.${indice}.${campo}`;
+                                return <label key={campo}>{etiqueta} *
+                                    <input type={campo === 'email_pagos' ? 'email' : 'text'} value={cuenta[campo]} required maxLength={maximo}
+                                        list={campo === 'tipo_cuenta' ? 'sugerencias-tipo-cuenta' : undefined}
+                                        aria-invalid={Boolean(errores[claveError])}
+                                        aria-describedby={errores[claveError] ? `error-${cuenta.clave}-${campo}` : undefined}
+                                        onChange={(e) => cambiarCuenta(cuenta.clave, campo, e.target.value)} />
+                                    {campo === 'tipo_cuenta' && <small>Puedes elegir una sugerencia o escribir otro tipo de cuenta.</small>}
+                                    {errores[claveError] && <small id={`error-${cuenta.clave}-${campo}`}>{errores[claveError]}</small>}
+                                </label>;
+                            })}</div>
+                            <label><span><input type="checkbox" checked={cuenta.activo}
+                                onChange={(e) => cambiarCuenta(cuenta.clave, 'activo', e.target.checked)} /> Cuenta activa</span></label>
+                            {errores[`cuentas_bancarias.${indice}.activo`] && <small>{errores[`cuentas_bancarias.${indice}.activo`]}</small>}
+                            {cuenta.id_datos_bancarios === undefined && <button type="button" onClick={() => {
+                                modificado.current = true;
+                                setCuentasBancarias((anteriores) => anteriores.filter((c) => c.clave !== cuenta.clave));
+                                setErrores({});
+                            }}>Quitar cuenta nueva</button>}
+                        </fieldset>)}
+                        <button type="button" disabled={cuentasBancarias.length >= 50} onClick={agregarCuenta}>Agregar cuenta bancaria</button>
                     </div>}
                     {tipo === 'clientes' && areasCliente.map(([lista, tituloArea]) => <div className="alpha-ejecutivos" key={lista}>
                         <h3>{tituloArea}</h3>
@@ -249,7 +275,7 @@ export default function Fichas({ tipo, registroInicial = null, soloFormulario = 
                                 setErrores({});
                             }}>Quitar contacto</button>
                         </fieldset>)}
-                        <button type="button" disabled={contactosCliente[lista].length >= 50} onClick={() => agregarContacto(lista)}>Agregar contacto</button>
+                        <button type="button" disabled={contactosCliente[lista].length >= 3} onClick={() => agregarContacto(lista)}>Agregar contacto</button>
                     </div>)}
                     {tipo === 'proveedores' && <div className="alpha-ejecutivos">
                         <h3>Ejecutivos comerciales</h3>
@@ -284,9 +310,9 @@ export default function Fichas({ tipo, registroInicial = null, soloFormulario = 
             </form>
             {error && <p role="alert">{error}</p>}
             {ok && <p role="status">{ok}</p>}
-            {!soloFormulario && <>
+            {tipo === 'categorias' && !soloFormulario && <>
             <h2>Registros</h2>
-            <label>Buscar {tipo === 'categorias' ? 'por nombre' : 'por RUT o razón social'}
+            <label>Buscar por nombre
                 <input type="search" maxLength={150} value={busqueda}
                     onChange={(e) => { setBusqueda(e.target.value); setPagina(1); setCargando(true); }} />
             </label>
@@ -295,19 +321,9 @@ export default function Fichas({ tipo, registroInicial = null, soloFormulario = 
             {cargando ? <p role="status">Cargando…</p> : !errorListado && <>
                 <p>{datos.total} registros encontrados</p>
                 <div className="alpha-tabla"><table>
-                    <thead><tr>{campos.map(([campo, etiqueta]) => <th key={campo}>{etiqueta}</th>)}{tipo === 'proveedores' && <th>Ejecutivos comerciales</th>}
-                        {tipo === 'proveedores' && <th>Ficha bancaria</th>}
-                        {tipo === 'clientes' && areasCliente.map(([lista, tituloArea]) => <th key={lista}>{tituloArea}</th>)}<th>Acciones</th></tr></thead>
+                    <thead><tr>{campos.map(([campo, etiqueta]) => <th key={campo}>{etiqueta}</th>)}<th>Acciones</th></tr></thead>
                     <tbody>{datos.registros.map((registro) => <tr key={registro[id]}>
-                        {campos.map(([campo]) => <td key={campo}>{registro[campo === 'id_region' ? 'region' : campo === 'id_comuna' ? 'comuna' : campo] || '—'}</td>)}
-                        {tipo === 'proveedores' && <td>{registro.ejecutivos?.length ? <ul>
-                            {registro.ejecutivos.map((e) => <li key={e.id_ejecutivo}>{e.nombre} — {e.rut} — {e.cargo} — {e.email} — {e.telefono}</li>)}
-                        </ul> : 'Sin ejecutivos'}</td>}
-                        {tipo === 'proveedores' && <td>{registro.banco ? <dl>{camposBanco.map(([campo, etiqueta]) =>
-                            <div key={campo}><dt>{etiqueta}</dt><dd>{registro[campo]}</dd></div>)}</dl> : 'Sin ficha bancaria'}</td>}
-                        {tipo === 'clientes' && areasCliente.map(([lista]) => <td key={lista}>{registro[lista]?.length ? <ul>
-                            {registro[lista].map((c) => <li key={c.id_contacto}>{c.nombre} — {c.rut} — {c.cargo} — {c.email} — {c.telefono}</li>)}
-                        </ul> : 'Sin contactos'}</td>)}
+                        {campos.map(([campo]) => <td key={campo}>{registro[campo] || '—'}</td>)}
                         <td><button disabled={guardando} onClick={() => editar(registro)}>Editar</button></td>
                     </tr>)}</tbody>
                 </table></div>
@@ -315,7 +331,7 @@ export default function Fichas({ tipo, registroInicial = null, soloFormulario = 
                 <nav aria-label="Paginación">
                     <button disabled={pagina <= 1} onClick={() => { setCargando(true); setPagina((valor) => valor - 1); }}>Anterior</button>
                     <span>Página {pagina}</span>
-                    <button disabled={pagina * 20 >= datos.total} onClick={() => { setCargando(true); setPagina((valor) => valor + 1); }}>Siguiente</button>
+                    <button disabled={pagina * datos.limite >= datos.total} onClick={() => { setCargando(true); setPagina((valor) => valor + 1); }}>Siguiente</button>
                 </nav>
             </>}
             </>}

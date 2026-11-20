@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api/cliente';
+import ErrorCarga from '../../components/ErrorCarga';
+import useListado from '../../hooks/useListado';
 import { tiposDocumento } from './configuracionFichas';
 import './alpha.css';
 
@@ -17,12 +19,15 @@ export default function EditorDocumentoProveedor() {
         let vigente = true;
         Promise.all([api(`/api/proveedores/${proveedor}`), id ? api(`/api/documentos-proveedor/${proveedor}/${id}`) : Promise.resolve(null)])
             .then(([ficha, documento]) => { if (vigente) setResultado({ clave, ficha, documento }); })
-            .catch((err) => { if (vigente) setResultado({ clave, error: err.message }); });
+            .catch((err) => { if (vigente) setResultado({ clave, error: err }); });
         return () => { vigente = false; };
     }, [proveedor, id, version, clave]);
     if (resultado?.clave !== clave) return <p role="status">Cargando documento…</p>;
-    if (resultado.error) return <section><p role="alert">{resultado.error}</p><button onClick={() => setVersion((v) => v + 1)}>Reintentar</button>
-        <Link to={`/alpha/proveedores/${proveedor}/documentos`}>Volver</Link></section>;
+    if (resultado.error) return <ErrorCarga error={resultado.error}
+        noEncontrado="Proveedor o documento no encontrado."
+        volver={resultado.error.status === 404 ? '/alpha/proveedores' : `/alpha/proveedores/${proveedor}/documentos`}
+        etiqueta={resultado.error.status === 404 ? 'Volver a proveedores' : 'Volver al listado'}
+        reintentar={() => setVersion((v) => v + 1)} />;
 
     return <FormularioDocumento key={clave} proveedor={resultado.ficha} documento={resultado.documento} />;
 }
@@ -52,7 +57,7 @@ function FormularioDocumento({ proveedor, documento }) {
         e.preventDefault(); setGuardando(true); setError(''); setErrores({});
         try {
             const guardado = await api(`/api/documentos-proveedor/${proveedor.id_proveedor}${documento ? `/${documento.id_documento}` : ''}`, {
-                method: documento ? 'PUT' : 'POST', body: { ...form, detalles: lineas.map(({ clave, articulo, unidad_medida, fecha_ingreso, ...d }) => { void clave; void articulo; void unidad_medida; void fecha_ingreso; return d; }) },
+                method: documento ? 'PUT' : 'POST', body: { ...form, detalles: lineas.map(({ clave, articulo, unidad_medida, ...d }) => { void clave; void articulo; void unidad_medida; return d; }) },
             });
             navigate(`${regreso}/${guardado.id_documento}/comprobante`);
         } catch(err) { setError(err.message); setErrores(err.errores || {}); }
@@ -118,32 +123,21 @@ function Margen({ linea, tasa }) {
     return <p>Margen estimado sobre venta neta, tras descuentos de producto: {ventaNeta > 0 && Number.isFinite(costo) && linea.costo_neto !== '' ? `${((ventaNeta - costo) / ventaNeta * 100).toFixed(2)} %` : '—'}. No incluye descuentos generales.</p>;
 }
 function BuscadorArticulo({ agregar }) {
-    const [q, setQ] = useState('');
-    const [pagina, setPagina] = useState(1);
-    const [version, setVersion] = useState(0);
-    const [resultado, setResultado] = useState(null);
-    const clave = `${q}-${pagina}-${version}`;
-    useEffect(() => {
-        let vigente = true;
-        const timer = setTimeout(() => api(`/api/documentos-proveedor/articulos?${new URLSearchParams({ q, pagina })}`)
-            .then((datos) => { if (vigente) setResultado({ clave, datos }); })
-            .catch((err) => { if (vigente) setResultado({ clave, error: err.message }); }), 250);
-        return () => { vigente = false; clearTimeout(timer); };
-    }, [q, pagina, version, clave]);
-    return <div><label>Buscar artículo<input type="search" maxLength={150} value={q} onChange={(e) => { setQ(e.target.value); setPagina(1); }} /></label>
+    const { q, buscar, pagina, setPagina, datos, error, cargando, recargar } = useListado('/api/documentos-proveedor/articulos');
+    return <div><label>Buscar artículo<input type="search" maxLength={150} value={q} onChange={(e) => { buscar(e.target.value); }} /></label>
         <small>Filtra por código o nombre. Sin búsqueda se muestran los artículos activos.</small>
-        {resultado?.clave !== clave ? <p role="status">Cargando artículos…</p> : resultado.error ? <p role="alert">{resultado.error}<button type="button" onClick={() => setVersion((v) => v + 1)}>Reintentar</button></p> : <>
+        {cargando ? <p role="status">Cargando artículos…</p> : error ? <p role="alert">{error.message}<button type="button" onClick={recargar}>Reintentar</button></p> : <>
             <div className="alpha-tabla"><table>
                 <caption>Artículos disponibles</caption>
                 <thead><tr><th>Código</th><th>Artículo</th><th>Unidad</th><th>Acciones</th></tr></thead>
-                <tbody>{resultado.datos.registros.map((a) => <tr key={a.id_articulo}>
+                <tbody>{datos.registros.map((a) => <tr key={a.id_articulo}>
                     <td>{a.codigo_interno}</td><td>{a.nombre}</td><td>{a.unidad_medida}</td>
                     <td><button type="button" onClick={() => agregar(a)} aria-label={`Agregar ${a.nombre}`}>Agregar</button></td>
                 </tr>)}</tbody>
             </table></div>
-            {!resultado.datos.registros.length && <p>No hay artículos activos para esta búsqueda.</p>}
+            {!datos.registros.length && <p>No hay artículos activos para esta búsqueda.</p>}
             <button type="button" disabled={pagina <= 1} onClick={() => setPagina((p) => p - 1)}>Anterior</button>
-            <button type="button" disabled={pagina * resultado.datos.limite >= resultado.datos.total} onClick={() => setPagina((p) => p + 1)}>Siguiente</button>
+            <button type="button" disabled={pagina * datos.limite >= datos.total} onClick={() => setPagina((p) => p + 1)}>Siguiente</button>
         </>}
     </div>;
 }

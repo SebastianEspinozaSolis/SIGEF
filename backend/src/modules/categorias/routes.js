@@ -3,16 +3,27 @@ const config = require('../../config');
 const { autenticar, autorizar } = require('../../middlewares/auth');
 const servicio = require('./service');
 
-router.use(autenticar);
-// Categorías acompaña la gestión de Bodega; Administración no accede al catálogo.
-router.get('/', autorizar(config.roles.ADMIN, config.roles.BODEGA),
-    async (req, res) => res.json(await servicio.listar(req.query)));
-// La creación y edición siguen reservadas a Administrador General y Bodega.
-router.use(autorizar(config.roles.ADMIN, config.roles.BODEGA));
+// Administrador General y Bodega 
+router.use(autenticar, autorizar(config.roles.ADMIN, config.roles.BODEGA));
+
+// Lista categorias con busqueda, guarda una nueva o edita existente.
+
+// GET /api/categorias
+router.get('/', async (req, res) => {
+    const categorias = await servicio.listar(req.query);
+    res.json(categorias);
+});
+
+// POST /api/categorias
 router.post('/', async (req, res) => {
-    res.status(201).json(await servicio.guardar(req.body || {}, req.user.id_usuario));
+    const categoria = await servicio.guardar(req.body || {}, req.user.id_usuario);
+    res.status(201).json(categoria);
 });
+
+// PUT /api/categorias/:id
 router.put('/:id', async (req, res) => {
-    res.json(await servicio.guardar(req.body || {}, req.user.id_usuario, req.params.id));
+    const categoria = await servicio.guardar(req.body || {}, req.user.id_usuario, req.params.id);
+    res.json(categoria);
 });
+
 module.exports = router;

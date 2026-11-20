@@ -10,13 +10,21 @@ export default function Usuarios() {
     const location = useLocation();
     const [cambiandoEstado, setCambiandoEstado] = useState(null);
     const [usuarios, setUsuarios] = useState([]);
+    const [cargando, setCargando] = useState(true);
+    const [errorListado, setErrorListado] = useState('');
+    const [version, setVersion] = useState(0);
     const [error, setError] = useState('');
     const [ok, setOk] = useState(location.state?.mensaje || '');
 
     // Se cargan los usuarios desde la API al montar el componente
     useEffect(() => {
-        api('/api/usuarios').then(setUsuarios).catch((e) => setError(e.message));
-    }, []);
+        let vigente = true;
+        api('/api/usuarios')
+            .then((datos) => { if (vigente) { setUsuarios(datos); setErrorListado(''); } })
+            .catch((e) => { if (vigente) setErrorListado(e.message); })
+            .finally(() => { if (vigente) setCargando(false); });
+        return () => { vigente = false; };
+    }, [version]);
 
     // Permite cambiar el estado de un usuario (Activo/Inactivo) mediante un PATCH a la API
     async function cambiarEstado(u) {
@@ -43,9 +51,14 @@ export default function Usuarios() {
 
             <Link to="/admin/usuarios/nuevo">Nuevo usuario</Link>
 
-            {error && <p>{error}</p>}
-            {ok && <p>{ok}</p>}
+            {error && <p role="alert">{error}</p>}
+            {ok && <p role="status">{ok}</p>}
+            {errorListado && <p role="alert">No se pudo cargar el listado: {errorListado}
+                <button type="button" onClick={() => { setCargando(true); setErrorListado(''); setVersion((v) => v + 1); }}>Reintentar</button>
+            </p>}
+            {cargando && <p role="status">Cargando usuarios…</p>}
 
+            {!cargando && !errorListado && <>
             <table>
                 <thead>
                     <tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th><th>Acciones</th></tr>
@@ -65,6 +78,8 @@ export default function Usuarios() {
                     ))}
                 </tbody>
             </table>
+            {!usuarios.length && <p>No hay usuarios para mostrar.</p>}
+            </>}
         </div>
     );
 }

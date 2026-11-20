@@ -1,20 +1,25 @@
 const pool = require('../../db');
 const ErrorHttp = require('../../utils/ErrorHttp');
 const { texto, idPositivo, filtrosListado, comprobarErrores } = require('../../utils/catalogos');
+const { escalar } = require('../../utils/decimales');
 const { registrarAuditoria } = require('../auditoria/service');
 
 const tipos = ['factura', 'boleta', 'guia_despacho', 'nota_credito'];
+
+// Valida números no negativos según su precisión y máximo permitido.
 function decimal(valor, campo, enteros, decimales, errores, maximo) {
     if (!['string', 'number'].includes(typeof valor) || !new RegExp(`^\\d{1,${enteros}}(\\.\\d{1,${decimales}})?$`).test(String(valor))
         || (maximo !== undefined && Number(valor) > maximo)) errores[campo] = 'Ingresa un valor no negativo válido';
     return String(valor);
 }
+// Comprueba el formato AAAA-MM-DD y que la fecha exista en el calendario.
 function fecha(valor, campo, errores) {
     if (typeof valor !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(valor)
         || !Number.isFinite(Date.parse(`${valor}T00:00:00Z`))
         || new Date(`${valor}T00:00:00Z`).toISOString().slice(0, 10) !== valor) errores[campo] = 'Fecha inválida';
     return valor;
 }
+// Valida la cabecera y los materiales; devuelve solo los campos admitidos.
 function validar(datos) {
     const errores = {};
     const cabecera = {
@@ -25,13 +30,17 @@ function validar(datos) {
             ? null : fecha(datos.fecha_vencimiento, 'fecha_vencimiento', errores),
         observaciones: texto(datos.observaciones, 'observaciones', 5000, errores, false),
     };
+    // si es factura, la fecha de vencimiento es obligatorio
     if (cabecera.tipo_documento === 'factura' && !cabecera.fecha_vencimiento) errores.fecha_vencimiento = 'La fecha de vencimiento es obligatoria para facturas';
+    // asegurarse que fecha de vencimiento no sea anterior a fecha de emisión, si ambas son válidas
     if (!errores.fecha_emision && !errores.fecha_vencimiento && cabecera.fecha_vencimiento
         && cabecera.fecha_vencimiento < cabecera.fecha_emision) errores.fecha_vencimiento = 'No puede ser anterior a la fecha de emisión';
+    // 
     if (!tipos.includes(cabecera.tipo_documento)) errores.tipo_documento = 'Selecciona un tipo de documento';
     for (const campo of ['descuento_general', 'descuento_pronto_pago', 'tasa_iva']) {
         cabecera[campo] = decimal(datos[campo] ?? (campo === 'tasa_iva' ? 19 : 0), campo, 3, 2, errores, 100);
     }
+    // Una nota de crédito debe identificar el documento que corrige.
     if (datos.id_documento_referencia) {
         try { cabecera.id_documento_referencia = idPositivo(datos.id_documento_referencia); }
         catch { errores.id_documento_referencia = 'Referencia inválida'; }
@@ -60,29 +69,29 @@ function validar(datos) {
 }
 
 // Cálculo exacto con enteros: importes en centésimos, redondeo por línea y etapa.
-function escala(valor, precision) {
-    const [entero, fraccion = ''] = String(valor).split('.');
-    return BigInt(entero) * 10n ** BigInt(precision) + BigInt(fraccion.padEnd(precision, '0'));
-}
+// Redondea las divisiones y convierte los importes a texto con dos decimales.
 function redondear(n, d) { return (n + d / 2n) / d; }
 function importe(n) { return `${n / 100n}.${String(n % 100n).padStart(2, '0')}`; }
+// Calcula descuentos por producto, general y pronto pago; después aplica IVA.
 function calcular(cabecera, detalles) {
     let subtotal = 0n, netoLineas = 0n;
     for (const d of detalles) {
-        const base = escala(d.cantidad, 3) * escala(d.costo_neto, 4);
+        const base = escalar(d.cantidad, 3) * escalar(d.costo_neto, 4);
         subtotal += redondear(base, 100000n);
-        const factor = ['descuento_1', 'descuento_2', 'descuento_3'].reduce((acum, campo) => acum * (10000n - escala(d[campo], 2)), 1n);
+        const factor = ['descuento_1', 'descuento_2', 'descuento_3'].reduce((acum, campo) => acum * (10000n - escalar(d[campo], 2)), 1n);
         netoLineas += redondear(base * factor, 100000n * 10000n ** 3n);
     }
-    const general = redondear(netoLineas * (10000n - escala(cabecera.descuento_general, 2)), 10000n);
-    const neto = redondear(general * (10000n - escala(cabecera.descuento_pronto_pago, 2)), 10000n);
-    const iva = redondear(neto * escala(cabecera.tasa_iva, 2), 10000n);
+    const general = redondear(netoLineas * (10000n - escalar(cabecera.descuento_general, 2)), 10000n);
+    const neto = redondear(general * (10000n - escalar(cabecera.descuento_pronto_pago, 2)), 10000n);
+    const iva = redondear(neto * escalar(cabecera.tasa_iva, 2), 10000n);
     if ([subtotal, neto, iva, neto + iva].some((n) => n > 99999999999999n)) throw new ErrorHttp(400, 'El importe supera el máximo admitido');
     return { subtotal: importe(subtotal), descuento_productos: importe(subtotal - netoLineas),
         neto_productos: importe(netoLineas), importe_descuento_general: importe(netoLineas - general),
         importe_descuento_pronto_pago: importe(general - neto),
         total_neto: importe(neto), iva: importe(iva), total: importe(neto + iva) };
 }
+// Recupera el documento con sus materiales, recepciones y totales calculados.
+// Acepta el pool para consultas independientes o el client de una transacción.
 async function obtenerCon(conexion, idProveedor, idDocumento) {
     const r = await conexion.query(`SELECT d.*, p.rut_proveedor, p.razon_social,
         EXISTS (SELECT 1 FROM movimiento_cardex m JOIN detalle_documento l USING(id_detalle_documento)
@@ -95,7 +104,10 @@ async function obtenerCon(conexion, idProveedor, idDocumento) {
     if (!r.rows[0]) throw new ErrorHttp(404, 'Documento no encontrado para este proveedor');
     return { ...r.rows[0], ...calcular(r.rows[0], r.rows[0].detalles) };
 }
+// Valida los identificadores antes de consultar un documento del proveedor.
 async function obtener(proveedor, documento) { return obtenerCon(pool, idPositivo(proveedor), idPositivo(documento)); }
+
+// Lista los documentos del proveedor y reconstruye sus totales desde los detalles.
 async function listar(proveedor, filtros = {}) {
     const id = idPositivo(proveedor);
     const { pagina, limite, offset } = filtrosListado(filtros);
@@ -110,6 +122,7 @@ async function listar(proveedor, filtros = {}) {
     });
     return { registros, total: Number(total.rows[0].total), pagina, limite };
 }
+// Busca artículos activos para agregarlos al documento de compra.
 async function articulos(filtros = {}) {
     const { pagina, limite, offset, patron } = filtrosListado(filtros);
     const where = 'activo=true AND (nombre ILIKE $1 OR codigo_interno ILIKE $1)';
@@ -117,6 +130,7 @@ async function articulos(filtros = {}) {
     const r = await pool.query(`SELECT id_articulo,codigo_interno,nombre,unidad_medida,precio_lista FROM articulo WHERE ${where} ORDER BY nombre,id_articulo LIMIT $2 OFFSET $3`, [patron, limite, offset]);
     return { registros: r.rows, total: Number(total.rows[0].total), pagina, limite };
 }
+// Crea o edita documento y materiales junto con su auditoría; no modifica stock.
 async function guardar(proveedor, datos, responsable, documento) {
     const idProveedor = idPositivo(proveedor);
     const id = documento === undefined ? null : idPositivo(documento);
@@ -133,17 +147,18 @@ async function guardar(proveedor, datos, responsable, documento) {
             anterior = await obtenerCon(client, idProveedor, id);
             // El bloqueo del documento también serializa las recepciones de Bodega.
             if (anterior.tiene_recepciones) {
+                // Con ingresos previos, los datos que determinan materiales y costos quedan bloqueados.
                 const protegidos = ['tipo_documento','id_documento_referencia','descuento_general','descuento_pronto_pago','tasa_iva'];
                 const cabeceraIgual = protegidos.every(campo => ['tipo_documento','id_documento_referencia'].includes(campo)
                     ? (cabecera[campo] ?? null) === (anterior[campo] ?? null)
-                    : escala(cabecera[campo],2) === escala(anterior[campo],2));
+                    : escalar(cabecera[campo],2) === escalar(anterior[campo],2));
                 const ids = new Set(detalles.map(d => d.id_detalle_documento));
                 const lineasIguales = detalles.length === anterior.detalles.length && ids.size === detalles.length && detalles.every(d => {
                     const previa = anterior.detalles.find(l => l.id_detalle_documento === d.id_detalle_documento);
                     return previa && d.id_articulo === previa.id_articulo && d.observaciones === (previa.observaciones || null)
                         && ['cantidad','costo_neto','descuento_1','descuento_2','descuento_3'].every(campo =>
-                            escala(d[campo],campo === 'cantidad' ? 3 : campo === 'costo_neto' ? 4 : 2)
-                            === escala(previa[campo],campo === 'cantidad' ? 3 : campo === 'costo_neto' ? 4 : 2));
+                            escalar(d[campo],campo === 'cantidad' ? 3 : campo === 'costo_neto' ? 4 : 2)
+                            === escalar(previa[campo],campo === 'cantidad' ? 3 : campo === 'costo_neto' ? 4 : 2));
                 });
                 if (!cabeceraIgual || !lineasIguales) throw new ErrorHttp(409, 'El documento tiene recepciones: solo puedes editar número, fechas de emisión y vencimiento y observaciones');
             }
@@ -153,6 +168,7 @@ async function guardar(proveedor, datos, responsable, documento) {
             const ref = await client.query("SELECT id_documento FROM documento_tributario WHERE id_documento=$1 AND id_proveedor=$2 AND tipo_documento <> 'nota_credito'", [cabecera.id_documento_referencia, idProveedor]);
             if (!ref.rows.length) throw new ErrorHttp(400, 'El documento original debe pertenecer al mismo proveedor');
         }
+        // Al editar, excluye el propio documento de la búsqueda de duplicados.
         const repetido = await client.query('SELECT id_documento FROM documento_tributario WHERE id_proveedor=$1 AND tipo_documento=$2 AND folio=$3 AND ($4::int IS NULL OR id_documento<>$4)', [idProveedor, cabecera.tipo_documento, cabecera.folio, id]);
         if (repetido.rows.length) throw new ErrorHttp(409, 'Ya existe ese documento del proveedor');
         if (!anterior?.tiene_recepciones) {
@@ -175,6 +191,7 @@ async function guardar(proveedor, datos, responsable, documento) {
             ? await client.query(`INSERT INTO documento_tributario (${campos.join(',')},id_proveedor) VALUES (${valores.map((_,i) => '$'+(i+1)).join(',')},$10) RETURNING id_documento`, [...valores,idProveedor])
             : await client.query(`UPDATE documento_tributario SET ${campos.map((c,i) => c+'=$'+(i+1)).join(',')} WHERE id_documento=$10 AND id_proveedor=$11 RETURNING id_documento`, [...valores,id,idProveedor]);
         const guardado = r.rows[0].id_documento;
+        // Sin recepciones se reemplazan las líneas; con recepciones se conservan sus IDs e ingresos.
         if (!anterior?.tiene_recepciones) {
             if (id !== null) await client.query('DELETE FROM detalle_documento WHERE id_documento=$1', [id]);
             for (const d of detalles) await client.query(`INSERT INTO detalle_documento

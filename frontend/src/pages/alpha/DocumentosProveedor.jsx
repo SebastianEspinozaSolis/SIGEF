@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/cliente';
+import ErrorCarga from '../../components/ErrorCarga';
 import './alpha.css';
 
 import { tiposDocumento } from './configuracionFichas';
@@ -14,14 +15,14 @@ export default function DocumentosProveedor() {
         let vigente = true;
         Promise.all([api(`/api/proveedores/${proveedor}`), api(`/api/documentos-proveedor/${proveedor}?pagina=${pagina}`)])
             .then(([ficha, datos]) => { if (vigente) setResultado({ clave, ficha, datos }); })
-            .catch((err) => { if (vigente) setResultado({ clave, error: err.message }); });
+            .catch((err) => { if (vigente) setResultado({ clave, error: err }); });
         return () => { vigente = false; };
     }, [proveedor, pagina, version, clave]);
     return <section className="alpha">
         <Link to="/alpha/proveedores">Volver a proveedores</Link><h1>Documentos del proveedor</h1>
-        <Link to={`/alpha/proveedores/${proveedor}/documentos/nuevo`}>Crear documento</Link>
-        {resultado?.clave !== clave ? <p role="status">Cargando…</p> : resultado.error ? <p role="alert">{resultado.error}
-            <button onClick={() => setVersion((v) => v + 1)}>Reintentar</button></p> : <>
+        {resultado?.clave !== clave ? <p role="status">Cargando…</p> : resultado.error ? <ErrorCarga error={resultado.error} noEncontrado="Proveedor no encontrado."
+            volver="/alpha/proveedores" etiqueta="Volver a proveedores" reintentar={() => setVersion((v) => v + 1)} /> : <>
+            <Link to={`/alpha/proveedores/${proveedor}/documentos/nuevo`}>Crear documento</Link>
             <h2>{resultado.ficha.razon_social} — {resultado.ficha.rut_proveedor}</h2>
             <table><thead><tr><th>Fecha de registro</th><th>Tipo</th><th>Número</th><th>Total</th><th>Acciones</th></tr></thead>
                 <tbody>{resultado.datos.registros.map((d) => <tr key={d.id_documento}>
