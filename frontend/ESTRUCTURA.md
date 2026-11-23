@@ -14,6 +14,8 @@ La pantalla decide si muestra carga, error o formulario. `useListado` añade bú
 
 ## Archivos y carpetas principales
 
+`utils/fechas.js` obtiene el día de `America/Santiago` para fechas de servicio e inicialización de formularios. Conserva los valores DATE (`AAAA-MM-DD`) sin desplazarlos y convierte los instantes ISO al día de Santiago. Las pantallas muestran las horas con zona explícita `America/Santiago`, independientemente de la configuración del dispositivo.
+
 `components/ConformidadObra.jsx` muestra la firma del cliente en el detalle de una obra finalizada del ERP. Consulta `/api/obras/:id/firma`, descomprime los trazos con `utils/firmas.js` y usa `signature_pad` para generar una imagen de solo lectura. Maneja carga, reintento, ausencia de firma y formato inválido; no guarda la firma en IndexedDB ni modifica la captura de Gamma.
 
 ### Portal de terreno Gamma

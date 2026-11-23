@@ -47,7 +47,7 @@ export default function ComprobanteDocumentoProveedor() {
     const esNota = d.tipo_documento === 'nota_credito';
     const esBoleta = d.tipo_documento === 'boleta';
     const tipo = tiposDocumento.find(([valor]) => valor === d.tipo_documento)?.[1] || d.tipo_documento;
-    const totales = esNota ? [['Neto de la correcci\u00f3n', d.total_neto], ['IVA (19 %)', d.iva], ['Total a rebajar', d.total]] : [
+    const totales = esNota ? [['Neto de la correcci\u00f3n', d.total_neto], [`IVA (${Number(d.tasa_iva ?? 19)} %)`, d.iva], ['Total a rebajar', d.total]] : [
         [esBoleta ? 'Subtotal bruto (IVA incluido)' : 'Subtotal', d.subtotal],
         ['Descuentos por producto', d.descuento_productos],
         [esBoleta ? 'Bruto tras descuentos por producto' : 'Subtotal tras descuentos por producto', d.neto_productos],

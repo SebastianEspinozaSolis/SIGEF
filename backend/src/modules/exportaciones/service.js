@@ -51,7 +51,7 @@ function htmlDocumento(d) {
     const esBoleta = d.tipo_documento === 'boleta';
     const datos = [['Proveedor', d.razon_social], ['RUT', d.rut_proveedor], ['Fecha de emisión', fecha(d.fecha_emision)],
         ...(d.tipo_documento === 'factura' ? [['Vencimiento', fecha(d.fecha_vencimiento)]] : []), ['Fecha de registro', fechaHora(d.fecha_ingreso)], ['Factura de referencia', d.id_documento_referencia ? `Folio ${d.folio_documento_referencia || d.id_documento_referencia}` : '—']];
-    const totales = esNota ? [['Neto de la correcci\u00f3n', d.total_neto], ['IVA (19 %)', d.iva], ['Total a rebajar', d.total]] : [[esBoleta ? 'Subtotal bruto (IVA incluido)' : 'Subtotal', d.subtotal], ['Descuentos por producto', d.descuento_productos], [esBoleta ? 'Bruto tras descuentos por producto' : 'Subtotal tras descuentos por producto', d.neto_productos],
+    const totales = esNota ? [['Neto de la correcci\u00f3n', d.total_neto], [`IVA (${Number(d.tasa_iva ?? 19)} %)`, d.iva], ['Total a rebajar', d.total]] : [[esBoleta ? 'Subtotal bruto (IVA incluido)' : 'Subtotal', d.subtotal], ['Descuentos por producto', d.descuento_productos], [esBoleta ? 'Bruto tras descuentos por producto' : 'Subtotal tras descuentos por producto', d.neto_productos],
         [d.es_factura_guias ? 'Descuentos generales incluidos en las guías' : `Descuento general (${decimal(d.descuento_general)} %)`, d.importe_descuento_general], [d.es_factura_guias ? 'Descuentos por pronto pago incluidos en las guías' : `Descuento pronto pago (${decimal(d.descuento_pronto_pago)} %)`, d.importe_descuento_pronto_pago],
         ['Total neto', d.total_neto], [`IVA ${esBoleta ? 'incluido ' : ''}(${decimal(d.tasa_iva)} %)`, d.iva], ['Total final', d.total]];
     if (d.saldo_pendiente != null) {
@@ -181,8 +181,8 @@ function htmlFacturaCliente(d) {
         <p><b>Obra:</b> ${escapar(d.nombre_obra)}</p><p>Emisión: ${escapar(fecha(d.fecha_emision))}${nota?'':` · Vencimiento: ${escapar(fecha(d.fecha_vencimiento))}`}</p>
         ${nota?`<p>Factura de referencia: ${escapar(d.folio_referencia)}</p>`:tabla('Servicios y materiales',
             ['Concepto','Tipo','Cantidad','Unidad','Precio neto unitario (CLP)','Subtotal neto (CLP)'],d.detalles.map(l=>[l.descripcion,l.tipo,l.cantidad,l.unidad_medida,l.precio_neto_unitario,l.subtotal]),[2,4,5],[4,5])}
-        ${tabla('Importes (CLP)',['Concepto','Monto'],nota?[['Neto de rebaja',d.total_neto],['IVA 19 %',d.iva],['Total a rebajar',d.total]]:
-            [['Subtotal neto',d.subtotal],[`Descuento (${d.descuento_general} %)`,d.importe_descuento_general],['Total neto',d.total_neto],['IVA 19 %',d.iva],['Total',d.total],['Notas de crédito',d.total_notas_credito],['Abonos',d.total_pagado],['Saldo por cobrar',d.saldo_pendiente]],[1],[1])}
+        ${tabla('Importes (CLP)',['Concepto','Monto'],nota?[['Neto de rebaja',d.total_neto],[`IVA ${Number(d.tasa_iva ?? 19)} %`,d.iva],['Total a rebajar',d.total]]:
+            [['Subtotal neto',d.subtotal],[`Descuento (${d.descuento_general} %)`,d.importe_descuento_general],['Total neto',d.total_neto],[`IVA ${Number(d.tasa_iva ?? 19)} %`,d.iva],['Total',d.total],['Notas de crédito',d.total_notas_credito],['Abonos',d.total_pagado],['Saldo por cobrar',d.saldo_pendiente]],[1],[1])}
         ${d.observaciones?`<p>${escapar(d.observaciones)}</p>`:''}
         <p class="aviso">Registro interno de SIGEF. No reemplaza un documento tributario emitido ante el SII.</p>`);
 }

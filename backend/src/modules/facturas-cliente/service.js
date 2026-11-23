@@ -57,7 +57,7 @@ async function fuentes(conexion,id,bloquear=false) {
     return {...obra,detalles:detalles.map(l=>({...l,subtotal:importes({detalles:[l]}).subtotal}))};
 }
 function importes(d) {
-    return calcular({...d,tipo_documento:'factura',tasa_iva:'19',descuento_pronto_pago:'0',descuento_general:d.descuento_general || '0'},
+    return calcular({...d,tipo_documento:'factura',tasa_iva:d.tasa_iva ?? '19',descuento_pronto_pago:'0',descuento_general:d.descuento_general || '0'},
         d.detalles.map(l=>({...l,costo_neto:l.precio_neto_unitario,descuento_1:'0',descuento_2:'0',descuento_3:'0'})));
 }
 async function obrasDisponibles(filtros={}) {
@@ -91,8 +91,8 @@ async function obtenerCon(conexion,id) {
     if(!d)throw new ErrorHttp(404,'Documento de cliente no encontrado');
     if(d.tipo_documento==='nota_credito')return {...d,...calcular(d,[]),detalles:[]};
     const fuente=await fuentes(conexion,d.id_obra);
-    const totales=importes({...fuente,descuento_general:d.descuento_general});
-    const notas=(await conexion.query("SELECT id_documento,folio,monto_neto_correccion FROM documento_tributario WHERE id_documento_referencia=$1 AND id_proveedor IS NULL AND tipo_documento='nota_credito' ORDER BY id_documento",[id])).rows;
+    const totales=importes({...fuente,tasa_iva:d.tasa_iva,descuento_general:d.descuento_general});
+    const notas=(await conexion.query("SELECT id_documento,folio,monto_neto_correccion,tasa_iva FROM documento_tributario WHERE id_documento_referencia=$1 AND id_proveedor IS NULL AND tipo_documento='nota_credito' ORDER BY id_documento",[id])).rows;
     const credito=notas.reduce((s,n)=>s+escalar(calcular({...n,tipo_documento:'nota_credito'},[]).total,2),0n);
     const pagado=(await conexion.query('SELECT COALESCE(SUM(monto),0) AS total FROM pago_documento WHERE id_documento=$1',[id])).rows[0]?.total || '0';
     const saldo=escalar(totales.total,2)-credito-escalar(pagado,2);
@@ -137,7 +137,7 @@ async function notaCredito(idFactura,entrada,usuario) {
         await client.query("SELECT id_documento FROM documento_tributario WHERE id_documento=$1 AND id_proveedor IS NULL AND tipo_documento='factura' FOR UPDATE",[id]);
         const factura=await obtenerCon(client,id);
         if(factura.tipo_documento!=='factura')throw new ErrorHttp(400,'La referencia debe ser una factura de cliente');
-        const totales=calcular({...d,tipo_documento:'nota_credito'},[]);
+        const totales=calcular({...d,tipo_documento:'nota_credito',tasa_iva:factura.tasa_iva},[]);
         const netoPrevio=factura.notas.reduce((s,n)=>s+escalar(n.monto_neto_correccion,2),0n);
         if(escalar(d.monto_neto_correccion,2)+netoPrevio>escalar(factura.total_neto,2)||escalar(totales.total,2)>escalar(factura.saldo_pendiente,2))throw new ErrorHttp(409,'La rebaja supera el saldo disponible de la factura');
         const fechaFactura=factura.fecha_emision instanceof Date?factura.fecha_emision.toLocaleDateString('sv-SE'):String(factura.fecha_emision).slice(0,10);
@@ -145,7 +145,7 @@ async function notaCredito(idFactura,entrada,usuario) {
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`folio-nc-cliente:${d.folio}`]);
         if((await client.query("SELECT id_documento FROM documento_tributario WHERE id_proveedor IS NULL AND tipo_documento='nota_credito' AND folio=$1",[d.folio])).rows.length)throw new ErrorHttp(409,'Ese folio de nota de crédito ya existe');
         const nota=(await client.query(`INSERT INTO documento_tributario (tipo_documento,folio,fecha_emision,observaciones,id_obra,id_documento_referencia,monto_neto_correccion,tasa_iva)
-            VALUES ('nota_credito',$1,$2,$3,$4,$5,$6,19) RETURNING id_documento`,[d.folio,d.fecha_emision,d.observaciones,factura.id_obra,id,d.monto_neto_correccion])).rows[0];
+            VALUES ('nota_credito',$1,$2,$3,$4,$5,$6,$7) RETURNING id_documento`,[d.folio,d.fecha_emision,d.observaciones,factura.id_obra,id,d.monto_neto_correccion,factura.tasa_iva])).rows[0];
         await registrarAuditoria(client,{id_usuario:usuario,tabla_afectada:'documento_tributario',id_registro_afectado:nota.id_documento,accion:'NC_CLIENTE',valores_nuevos:{id_operacion:entrada.id_operacion.toLowerCase(),solicitud,id_documento:nota.id_documento,total:totales.total}});
         await client.query('COMMIT');return nota;
     }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}

@@ -188,7 +188,7 @@ export default function Articulos({ soloFormulario = false, registroInicial = nu
                     <td>{articulo.bodega_sector}</td><td>{articulo.descripcion || '—'}</td>
                     <td>{articulo.stock_actual}</td><td>{articulo.stock_comprometido}</td><td>{articulo.stock_disponible}</td><td>{articulo.stock_minimo}</td>
                     <td>{pesos(articulo.precio_pmp)}</td><td>{articulo.ultimo_costo_compra == null ? 'Sin compras registradas' : pesos(articulo.ultimo_costo_compra)}</td>
-                    <td>{pesos(articulo.precio_lista)}</td><td>{articulo.fecha_actualizacion_precio ? new Date(articulo.fecha_actualizacion_precio).toLocaleString('es-CL') : '—'}</td><td>{articulo.activo ? 'Activo' : 'Inactivo'}</td>
+                    <td>{pesos(articulo.precio_lista)}</td><td>{articulo.fecha_actualizacion_precio ? new Date(articulo.fecha_actualizacion_precio).toLocaleString('es-CL', { timeZone: 'America/Santiago' }) : '—'}</td><td>{articulo.activo ? 'Activo' : 'Inactivo'}</td>
                     <td>{articulo.stock_critico ? <span className="alpha-critico">Stock en mínimo o inferior</span> : '—'}</td>
                     <td><button disabled={guardando} onClick={() => editar(articulo)}>Editar</button>
                         <button type="button" disabled={guardando || !articulo.activo} title={!articulo.activo ? 'Artículo inactivo' : undefined} onClick={() => navigate(`/alpha/articulos/${articulo.id_articulo}/movimientos`)}>Movimientos</button></td>

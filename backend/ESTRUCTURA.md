@@ -2,6 +2,14 @@
 
 El backend recibe las peticiones del frontend, comprueba permisos y trabaja con PostgreSQL.
 
+## Fechas y zona horaria
+
+Los cálculos de documentos y saldos utilizan `tasa_iva` guardada en cada documento. Las NC copian la tasa de la factura original al registrarse; JavaScript, consultas SQL, vista materializada y comprobantes usan esa tasa. El 19 % permanece como regla predeterminada para nuevas compras y facturas del MVP, sin habilitar edición de IVA al usuario.
+
+Las fechas con hora del schema usan `TIMESTAMPTZ`; `db.js` configura cada conexión con `America/Santiago`. Los reportes agrupan meses con `AT TIME ZONE 'America/Santiago'`, sin depender de la zona del servidor. Las columnas `DATE` de emisión, vencimiento y pago se devuelven como texto `AAAA-MM-DD` mediante el parser de pg para evitar desplazamientos de calendario en Node.
+
+Gamma conserva el contrato offline de fecha de servicio `AAAA-MM-DD`: el backend la convierte explícitamente a medianoche de Santiago al guardar la hoja. No se cambia la huella de las operaciones pendientes ni la duración de los JWT. Las conversiones de datos anteriores deben interpretar sus horas en la zona que realmente tenían; la base local se convirtió desde America/Santiago conservando sus fechas y horas locales.
+
 ## Abonos y alertas de facturas de clientes
 
 `modules/pagos-documento/service.js` reutiliza `pago_documento` para proveedores y clientes. Para una factura de cliente obtiene el total reconstruido mediante `facturas-cliente/service.js`; las NC de monto y abonos se restan al saldo. Admite pagos parciales y completos en pesos enteros. La factura se bloquea antes de consultar su saldo, igual que al registrar una NC; pagos concurrentes no pueden superar lo pendiente. Pago y auditoría se confirman juntos y el UUID impide duplicar reintentos. Las notas de crédito no reciben abonos. Listado e historial conservan el endpoint `/api/pagos-documento/:id`, restringido a Administración/Administrador General.
@@ -163,7 +171,7 @@ Los módulos usan `routes.js` y `service.js`. `utils/catalogos.js` reúne valida
 
 Listados: `q`, `pagina` (inicia en 1), `limite` (20 por defecto, máximo 100). Respuesta `{ registros, total, pagina, limite }`. Clientes/proveedores buscan por RUT o razón social, categorías por nombre. La búsqueda por RUT usa el texto almacenado sin puntos. Artículos buscan por nombre/código interno/barras y admiten `id_categoria`, `activo=true|false` y `critico=true`; filtro vacío significa todos. Los valores van parametrizados; los comodines escritos por el usuario se buscan literalmente.
 
-Campos requeridos de proveedor: RUT válido, razón social, dirección, región, comuna y ciudad. Del cliente: RUT, razón social, dirección, región, comuna y ciudad; giro comercial es obligatorio. Los contactos se guardan en las tablas separadas descritas abajo. Los campos opcionales vacíos se guardan como NULL. Para artículos se exige código interno, nombre, categoría, unidad y mínimo no negativo con hasta tres decimales. Barras, ubicación, bodega o sector y precio de lista son obligatorios. Las unidades se seleccionan de UN, M, M2, M3, KG y L, validadas por el backend. Se puede cambiar el indicador `activo`; no hay eliminación física de fichas.
+Campos requeridos de proveedor: RUT válido, razón social, dirección, región, comuna y ciudad. Del cliente: RUT, razón social, dirección, región, comuna y ciudad; giro comercial es obligatorio. Los contactos se guardan en contacto_cliente, clasificados por area. Los campos opcionales vacíos se guardan como NULL. Para artículos se exige código interno, nombre, categoría, unidad y mínimo no negativo con hasta tres decimales. Barras, ubicación, bodega o sector y precio de lista son obligatorios. Las unidades se seleccionan de UN, M, M2, M3, KG y L, validadas por el backend. Se puede cambiar el indicador `activo`; no hay eliminación física de fichas.
 
 ### Ficha ampliada de proveedores
 
@@ -181,7 +189,7 @@ El cambio a múltiples cuentas está definido en `db/schema.sql` y requiere adap
 
 ### Contactos de clientes en dos tablas
 
-`contacto_proyecto` y `contacto_finanzas` sustituyen las columnas de texto homónimas de `cliente`. Cada tabla tiene `id_contacto`, FK `id_cliente`, `nombre`, `rut`, `cargo`, `email` y `telefono`. Se permiten varios contactos por área y la misma persona en ambas. `UNIQUE (id_cliente, rut)` se aplica por separado en cada tabla, no sobre el ID del cliente solamente.
+`contacto_cliente` almacena los contactos de ambas áreas con `id_contacto`, FK `id_cliente`, `area`, `nombre`, `rut`, `cargo`, `email` y `telefono`. CHECK admite Proyecto o Finanzas y `UNIQUE (id_cliente, area, rut)` impide repetir un RUT dentro de la misma área del cliente. La API conserva `contactos_proyecto` y `contactos_finanzas`, con un máximo de tres por área. Las consultas y escrituras filtran por cliente y área para impedir modificar contactos ajenos o moverlos entre apartados por su ID.
 
 GET `/api/clientes` incluye dos listas: `contactos_proyecto` y `contactos_finanzas`. POST y PUT requieren ambas listas explícitas; pueden estar vacías, sin inventar un mínimo obligatorio por área. Cada contacto agregado exige sus cinco datos. Se validan RUT, correo y longitudes; correo en minúsculas y RUT sin puntos. El límite técnico es 50 por área. Los IDs existentes se conservan y deben pertenecer al cliente y a la tabla correspondiente; un ID de proyectos no se utiliza para modificar finanzas. Al quitar un contacto y guardar, se elimina de esa tabla y la auditoría conserva el valor anterior.
 
@@ -462,7 +470,7 @@ Las boletas reciben `detalles[].costo_bruto` en pesos enteros. `utils/importesDo
 
 ### Nota de credito: correccion global de monto
 
-La NC registra folio, emision, motivo obligatorio, factura original y `monto_neto_correccion`. No tiene vencimiento ni lineas de materiales. La columna NUMERIC(14,2) es obligatoria y positiva solo para NC mediante `chk_monto_nota_credito`; en otros documentos permanece NULL. IVA 19 % y total se calculan, sin columnas derivadas.
+La NC registra folio, emision, motivo obligatorio, factura original y `monto_neto_correccion`. No tiene vencimiento ni lineas de materiales. La columna NUMERIC(14,0) guarda pesos enteros, obligatorios y positivos solo para NC mediante `chk_monto_nota_credito`; en otros documentos permanece NULL. IVA 19 % y total se calculan, sin columnas derivadas. Los totales de presupuestos y los montos de pagos también se almacenan como NUMERIC(14,0); los costos unitarios y el PMP conservan cuatro decimales. El backend rechaza fracciones en montos finales, incluidos presupuestos manuales antiguos.
 
 El selector de referencias ofrece facturas del mismo proveedor con saldo positivo, por folio, fecha y saldo. El servidor bloquea la factura antes de validar y registrar: `saldo = total factura - pagos - total notas de credito`. La rebaja con IVA no puede superar ese saldo. Documento y auditoria se guardan en la misma transaccion; no se escribe en Cardex. Una NC registrada no admite edicion. Las facturas con NC conservan sus importes y detalles; solo permiten cambios de metadata si no existen otros bloqueos.
 

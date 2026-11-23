@@ -33,9 +33,9 @@ export default function DetalleObra() {
         <dl><dt>Cliente</dt><dd>{datos.razon_social} — {datos.rut_cliente}</dd>
             <dt>Presupuesto</dt><dd><Link to={`/beta/presupuestos/${datos.id_presupuesto}`}>#{datos.id_presupuesto}</Link> — {pesos(datos.monto_total)} CLP</dd>
             <dt>Servicio</dt><dd>{datos.nombre_servicio}</dd><dt>Técnico responsable</dt><dd>{datos.tecnico}</dd>
-            <dt>Estado</dt><dd>{datos.estado}</dd><dt>Creación</dt><dd>{new Date(datos.fecha_creacion).toLocaleString('es-CL')}</dd>
+            <dt>Estado</dt><dd>{datos.estado}</dd><dt>Creación</dt><dd>{new Date(datos.fecha_creacion).toLocaleString('es-CL', { timeZone: 'America/Santiago' })}</dd>
             <dt>Sin materiales</dt><dd>{datos.sin_materiales ? 'Sí' : 'No'}</dd>
-            {datos.fecha_cierre && <><dt>Fecha de cierre</dt><dd>{new Date(datos.fecha_cierre).toLocaleString('es-CL')}</dd></>}
+            {datos.fecha_cierre && <><dt>Fecha de cierre</dt><dd>{new Date(datos.fecha_cierre).toLocaleString('es-CL', { timeZone: 'America/Santiago' })}</dd></>}
         </dl>
         {datos.estado==='Finalizada' && [ROLES.ADMIN,ROLES.ADMINISTRACION].includes(usuario.rol) && <p><Link to={datos.id_factura_cliente?`/beta/facturas-clientes/${datos.id_factura_cliente}`:`/beta/facturas-clientes/nuevo?obra=${id}`}>{datos.id_factura_cliente?'Ver factura de cliente':'Crear factura de cliente'}</Link></p>}
         {datos.estado==='En proceso' && datos.tareas_completadas && <p role="status"><strong>Tareas completadas: revisar y finalizar la obra.</strong> {datos.conformidad_recibida?'Conformidad del cliente recibida.':'La conformidad del cliente todavía no se ha recibido.'}</p>}

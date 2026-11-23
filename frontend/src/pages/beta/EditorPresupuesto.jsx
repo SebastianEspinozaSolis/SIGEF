@@ -120,7 +120,7 @@ function Formulario({ registro }) {
     }
 
     return <>
-        {registro && <p>Estado: {registro.estado} · Origen: {registro.origen} · Fecha de emisión: {new Date(registro.fecha_emision).toLocaleString('es-CL')}</p>}
+        {registro && <p>Estado: {registro.estado} · Origen: {registro.origen} · Fecha de emisión: {new Date(registro.fecha_emision).toLocaleString('es-CL', { timeZone: 'America/Santiago' })}</p>}
         <form onSubmit={guardar}><fieldset className="alpha-campos" disabled={guardando || creandoTarea || !editable}>
             <SelectorPaginado etiqueta="Cliente" ruta="/api/presupuestos/clientes" valor={cliente} seleccionado={registro?.razon_social}
                 alCambiar={setCliente} campoId="id_cliente" nombre={c => `${c.razon_social} — ${c.rut_cliente}`} />

@@ -9,7 +9,7 @@ import '../alpha/alpha.css';
 export default function EditorFacturaCliente(){
     const [parametros]=useSearchParams();const navigate=useNavigate();
     const [obra,setObra]=useState(parametros.get('obra') || '');
-    const [form,setForm]=useState(()=>({folio:'',fecha_emision:new Date().toLocaleDateString('sv-SE'),fecha_vencimiento:'',descuento_general:'0',observaciones:''}));
+    const [form,setForm]=useState(()=>({folio:'',fecha_emision:new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' }),fecha_vencimiento:'',descuento_general:'0',observaciones:''}));
     const [operacion]=useState(()=>crypto.randomUUID());
     const {datos,error,cargando,recargar}=useRegistro(obra?`/api/facturas-cliente/previsualizar/${obra}?descuento=${encodeURIComponent(form.descuento_general || '0')}`:null);
     const [fallo,setFallo]=useState('');const [ocupado,setOcupado]=useState(false);const envio=useRef(false);

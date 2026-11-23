@@ -24,7 +24,7 @@ function totalBaseSql(alias) {
                     WHERE l.id_documento=${alias}.id_documento) lineas) generales) importes)`;
 }
 const totalDocumentoSql = `(CASE WHEN d.tipo_documento='nota_credito' AND d.monto_neto_correccion IS NOT NULL
-    THEN ROUND(d.monto_neto_correccion,0) + ROUND(ROUND(d.monto_neto_correccion,0) * 19 / 100,0)
+    THEN ROUND(d.monto_neto_correccion,0) + ROUND(ROUND(d.monto_neto_correccion,0) * d.tasa_iva / 100,0)
     WHEN EXISTS(SELECT 1 FROM factura_guia fg WHERE fg.id_factura=d.id_documento)
     THEN (SELECT COALESCE(SUM(${totalBaseSql('g')}),0) FROM factura_guia fg
         JOIN documento_tributario g ON g.id_documento=fg.id_guia WHERE fg.id_factura=d.id_documento)
@@ -38,13 +38,13 @@ const documentosGuiasSql = `COALESCE((SELECT json_agg(json_build_object(
     WHERE fg.id_factura=d.id_documento),'[]'::json)`;
 
 // Las NC globales reducen deuda; no se confunden con pagos ni con recepciones.
-const totalNotasCreditoSql = `COALESCE((SELECT SUM(ROUND(nc.monto_neto_correccion,0) + ROUND(ROUND(nc.monto_neto_correccion,0) * 19 / 100,0))
+const totalNotasCreditoSql = `COALESCE((SELECT SUM(ROUND(nc.monto_neto_correccion,0) + ROUND(ROUND(nc.monto_neto_correccion,0) * nc.tasa_iva / 100,0))
     FROM documento_tributario nc WHERE nc.id_documento_referencia=d.id_documento
     AND nc.tipo_documento='nota_credito'),0)`;
 const saldoDocumentoSql = `(${totalDocumentoSql} - COALESCE((SELECT SUM(a.monto) FROM pago_documento a WHERE a.id_documento=d.id_documento),0) - ${totalNotasCreditoSql})`;
 
 // Misma reconstrucción que facturas-cliente: servicios y egresos netos al precio histórico.
-const totalFacturaClienteSql=`(SELECT neto+ROUND(neto*19/100,0) FROM (
+const totalFacturaClienteSql=`(SELECT neto+ROUND(neto*d.tasa_iva/100,0) FROM (
     SELECT subtotal-ROUND(subtotal*d.descuento_general/100,0) AS neto FROM (
         SELECT COALESCE(SUM(importe),0) AS subtotal FROM (
             SELECT ROUND(s.cantidad*s.precio_neto_unitario,0) AS importe FROM detalle_presupuesto s

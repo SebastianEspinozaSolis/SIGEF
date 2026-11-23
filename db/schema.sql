@@ -6,6 +6,9 @@
 -- NO usar en produccion con datos reales.
 -- =====================================================
 SET client_encoding TO 'UTF8';
+SET TIME ZONE 'America/Santiago';
+-- TIMESTAMPTZ conserva instantes; las consultas y pantallas usan el calendario de Santiago.
+-- DATE conserva días de emisión, vencimiento y pago, sin convertirlos en instantes.
 
 DROP SCHEMA public CASCADE;
 CREATE SCHEMA public;
@@ -62,7 +65,7 @@ CREATE TABLE registro_auditoria (
   accion                VARCHAR(20) NOT NULL,
   valores_anteriores    JSONB,
   valores_nuevos        JSONB,
-  fecha_hora            TIMESTAMP NOT NULL DEFAULT now()
+  fecha_hora            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 COMMENT ON TABLE registro_auditoria IS
@@ -82,7 +85,7 @@ COMMENT ON COLUMN registro_auditoria.valores_anteriores IS
 COMMENT ON COLUMN registro_auditoria.valores_nuevos IS
   'Datos posteriores a la acción en formato JSONB. Admite NULL; en cambios de contraseña se omite para no registrar valores sensibles. El backend excluye los campos sensibles.';
 COMMENT ON COLUMN registro_auditoria.fecha_hora IS
-  'Fecha y hora de referencia de la auditoría. TIMESTAMP sin zona horaria, obligatorio y con valor predeterminado now(), correspondiente al inicio de la transacción si no se proporciona otro valor.';
+  'Fecha y hora de referencia de la auditoría. TIMESTAMPTZ, presentado en America/Santiago, obligatorio y con valor predeterminado now(), correspondiente al inicio de la transacción si no se proporciona otro valor.';
 
 -- ---------- ALPHA: CATALOGOS ----------
 -- Catálogo geográfico compartido; cada comuna pertenece a una sola región.
@@ -218,7 +221,7 @@ CREATE TABLE cliente (
 );
 
 COMMENT ON TABLE cliente IS
-  'Ficha de identificación, giro comercial y ubicación de cada cliente. Sus contactos de proyectos y finanzas se registran en tablas separadas.';
+  'Ficha de identificación, giro comercial y ubicación de cada cliente. Sus contactos de proyectos y finanzas se registran en contacto_cliente, diferenciados por área.';
 COMMENT ON COLUMN cliente.id_cliente IS
   'Identificador del cliente. Clave primaria entera, autoincremental y no nula.';
 COMMENT ON COLUMN cliente.rut_cliente IS
@@ -235,61 +238,36 @@ COMMENT ON COLUMN cliente.ciudad IS
   'Ciudad del cliente. Texto de hasta 100 caracteres, obligatorio.';
 
 -- Se admiten varios encargados de cada área para una misma empresa.
-CREATE TABLE contacto_proyecto (
+CREATE TABLE contacto_cliente (
   id_contacto  SERIAL PRIMARY KEY,
   id_cliente   INT NOT NULL REFERENCES cliente(id_cliente),
+  area         VARCHAR(30) NOT NULL CHECK (area IN ('Proyecto', 'Finanzas')),
   nombre       VARCHAR(150) NOT NULL,
   rut          VARCHAR(12) NOT NULL,
   cargo        VARCHAR(100) NOT NULL,
   email        VARCHAR(120) NOT NULL,
   telefono     VARCHAR(30) NOT NULL,
-  UNIQUE (id_cliente, rut)
+  UNIQUE (id_cliente, area, rut)
 );
 
-COMMENT ON TABLE contacto_proyecto IS
-  'Contactos del área de proyectos de cada cliente. Un cliente puede tener cero o varios contactos; un mismo RUT no se repite dentro de esta área del mismo cliente, pero puede aparecer en finanzas o en otros clientes.';
-COMMENT ON COLUMN contacto_proyecto.id_contacto IS
-  'Identificador del contacto de proyectos. Clave primaria entera, autoincremental y no nula, independiente de los identificadores de contacto_finanzas.';
-COMMENT ON COLUMN contacto_proyecto.id_cliente IS
-  'Cliente al que pertenece el contacto de proyectos. Entero obligatorio y clave foránea hacia cliente(id_cliente).';
-COMMENT ON COLUMN contacto_proyecto.nombre IS
-  'Nombre del contacto de proyectos. Texto de hasta 150 caracteres, obligatorio.';
-COMMENT ON COLUMN contacto_proyecto.rut IS
-  'RUT del contacto de proyectos. Texto de hasta 12 caracteres, obligatorio; el backend lo normaliza y valida. La combinación de cliente y RUT es única en esta tabla.';
-COMMENT ON COLUMN contacto_proyecto.cargo IS
-  'Cargo del contacto de proyectos. Texto de hasta 100 caracteres, obligatorio.';
-COMMENT ON COLUMN contacto_proyecto.email IS
-  'Correo electrónico del contacto de proyectos. Texto de hasta 120 caracteres, obligatorio; el backend valida su formato.';
-COMMENT ON COLUMN contacto_proyecto.telefono IS
-  'Teléfono del contacto de proyectos. Texto de hasta 30 caracteres, obligatorio; el backend valida el formato chileno con prefijo +56 y nueve dígitos nacionales.';
-
-CREATE TABLE contacto_finanzas (
-  id_contacto  SERIAL PRIMARY KEY,
-  id_cliente   INT NOT NULL REFERENCES cliente(id_cliente),
-  nombre       VARCHAR(150) NOT NULL,
-  rut          VARCHAR(12) NOT NULL,
-  cargo        VARCHAR(100) NOT NULL,
-  email        VARCHAR(120) NOT NULL,
-  telefono     VARCHAR(30) NOT NULL,
-  UNIQUE (id_cliente, rut)
-);
-
-COMMENT ON TABLE contacto_finanzas IS
-  'Contactos del área de finanzas de cada cliente. Un cliente puede tener cero o varios contactos; un mismo RUT no se repite dentro de esta área del mismo cliente, pero puede aparecer en proyectos o en otros clientes.';
-COMMENT ON COLUMN contacto_finanzas.id_contacto IS
-  'Identificador del contacto de finanzas. Clave primaria entera, autoincremental y no nula, independiente de los identificadores de contacto_proyecto.';
-COMMENT ON COLUMN contacto_finanzas.id_cliente IS
-  'Cliente al que pertenece el contacto de finanzas. Entero obligatorio y clave foránea hacia cliente(id_cliente).';
-COMMENT ON COLUMN contacto_finanzas.nombre IS
-  'Nombre del contacto de finanzas. Texto de hasta 150 caracteres, obligatorio.';
-COMMENT ON COLUMN contacto_finanzas.rut IS
-  'RUT del contacto de finanzas. Texto de hasta 12 caracteres, obligatorio; el backend lo normaliza y valida. La combinación de cliente y RUT es única en esta tabla.';
-COMMENT ON COLUMN contacto_finanzas.cargo IS
-  'Cargo del contacto de finanzas. Texto de hasta 100 caracteres, obligatorio.';
-COMMENT ON COLUMN contacto_finanzas.email IS
-  'Correo electrónico del contacto de finanzas. Texto de hasta 120 caracteres, obligatorio; el backend valida su formato.';
-COMMENT ON COLUMN contacto_finanzas.telefono IS
-  'Teléfono del contacto de finanzas. Texto de hasta 30 caracteres, obligatorio; el backend valida el formato chileno con prefijo +56 y nueve dígitos nacionales.';
+COMMENT ON TABLE contacto_cliente IS
+  'Contactos de clientes clasificados por área de Proyecto o Finanzas. Un cliente puede tener cero o varios contactos de cada área. UNIQUE impide repetir un RUT dentro de la misma área del cliente, pero permite que una persona figure en ambas áreas o en otros clientes.';
+COMMENT ON COLUMN contacto_cliente.id_contacto IS
+  'Identificador del contacto. Clave primaria entera, autoincremental y no nula, compartida por todas las áreas.';
+COMMENT ON COLUMN contacto_cliente.id_cliente IS
+  'Cliente al que pertenece el contacto. Entero obligatorio y clave foránea hacia cliente(id_cliente).';
+COMMENT ON COLUMN contacto_cliente.area IS
+  'Área de contacto dentro del cliente. Texto de hasta 30 caracteres, obligatorio; CHECK admite Proyecto o Finanzas. El backend establece el área según el apartado del formulario y conserva las dos listas en la API.';
+COMMENT ON COLUMN contacto_cliente.nombre IS
+  'Nombre del contacto. Texto de hasta 150 caracteres, obligatorio.';
+COMMENT ON COLUMN contacto_cliente.rut IS
+  'RUT del contacto. Texto de hasta 12 caracteres, obligatorio; el backend lo normaliza y valida. La combinación de cliente, área y RUT es única.';
+COMMENT ON COLUMN contacto_cliente.cargo IS
+  'Cargo del contacto en la empresa cliente. Texto de hasta 100 caracteres, obligatorio.';
+COMMENT ON COLUMN contacto_cliente.email IS
+  'Correo electrónico del contacto. Texto de hasta 120 caracteres, obligatorio; el backend valida su formato.';
+COMMENT ON COLUMN contacto_cliente.telefono IS
+  'Teléfono del contacto. Texto de hasta 30 caracteres, obligatorio; el backend valida el formato chileno con prefijo +56 y nueve dígitos nacionales.';
 
 CREATE TABLE articulo (
   id_articulo         SERIAL PRIMARY KEY,
@@ -302,12 +280,15 @@ CREATE TABLE articulo (
   bodega_sector       VARCHAR(80) NOT NULL,
   descripcion         TEXT,
   precio_lista        NUMERIC(14,0) NOT NULL CHECK (precio_lista >= 0),
-  fecha_actualizacion_precio TIMESTAMP NOT NULL DEFAULT now(),
+  fecha_actualizacion_precio TIMESTAMPTZ NOT NULL DEFAULT now(),
   stock_minimo        NUMERIC(12,3) NOT NULL DEFAULT 0,
   stock_actual        NUMERIC(12,3) NOT NULL DEFAULT 0,
   stock_comprometido  NUMERIC(12,3) NOT NULL DEFAULT 0,
   precio_pmp          NUMERIC(14,4) NOT NULL DEFAULT 0,
-  activo              BOOLEAN NOT NULL DEFAULT TRUE
+  activo              BOOLEAN NOT NULL DEFAULT TRUE,
+  CONSTRAINT chk_articulo_stock_actual CHECK (stock_actual >= 0),
+  CONSTRAINT chk_articulo_stock_comprometido CHECK (stock_comprometido >= 0),
+  CONSTRAINT chk_articulo_stock_disponible CHECK (stock_actual >= stock_comprometido)
 );
 
 COMMENT ON TABLE articulo IS
@@ -333,13 +314,13 @@ COMMENT ON COLUMN articulo.descripcion IS
 COMMENT ON COLUMN articulo.precio_lista IS
   'Precio comercial unitario en CLP con IVA incluido, según el uso actual del sistema. NUMERIC(14,0), obligatorio y sin decimales; CHECK impide valores negativos. Se edita en el catálogo y no representa el costo PMP.';
 COMMENT ON COLUMN articulo.fecha_actualizacion_precio IS
-  'Fecha y hora de referencia del precio de lista. TIMESTAMP sin zona horaria, obligatorio y con valor predeterminado now() al crear. El backend lo actualiza cuando cambia precio_lista; no existe un trigger para hacerlo automáticamente.';
+  'Fecha y hora de referencia del precio de lista. TIMESTAMPTZ, presentado en America/Santiago, obligatorio y con valor predeterminado now() al crear. El backend lo actualiza cuando cambia precio_lista; no existe un trigger para hacerlo automáticamente.';
 COMMENT ON COLUMN articulo.stock_minimo IS
   'Umbral mínimo de existencias. NUMERIC(12,3), obligatorio y con valor predeterminado cero. El backend exige un valor no negativo y muestra alerta cuando el disponible en bodega es menor o igual a este mínimo.';
 COMMENT ON COLUMN articulo.stock_actual IS
-  'Cantidad total de existencias, incluida la asignada a técnicos y todavía no consumida. NUMERIC(12,3), obligatorio y con valor predeterminado cero. El backend actualiza este saldo mediante los movimientos; no se edita directamente desde la ficha.';
+  'Cantidad total de existencias, incluida la asignada a técnicos y todavía no consumida. NUMERIC(12,3), obligatorio y con valor predeterminado cero. CHECK impide valores negativos y exige que sea mayor o igual al stock comprometido. El backend actualiza este saldo mediante los movimientos; no se edita directamente desde la ficha.';
 COMMENT ON COLUMN articulo.stock_comprometido IS
-  'Cantidad asignada a técnicos mediante USO_INTERNO y todavía no consumida ni liberada. NUMERIC(12,3), obligatorio y con valor predeterminado cero. Está incluida en stock_actual y se resta para calcular el disponible en bodega.';
+  'Cantidad asignada a técnicos mediante USO_INTERNO y todavía no consumida ni liberada. NUMERIC(12,3), obligatorio y con valor predeterminado cero. CHECK impide valores negativos y superar stock_actual. Está incluida en stock_actual y se resta para calcular el disponible en bodega.';
 COMMENT ON COLUMN articulo.precio_pmp IS
   'Costo unitario promedio ponderado utilizado para valorar las existencias, sin IVA. NUMERIC(14,4), obligatorio y con valor predeterminado cero. El backend lo calcula según las reglas de los movimientos; sus cuatro decimales conservan precisión aunque los precios comerciales se expresen en pesos enteros.';
 COMMENT ON COLUMN articulo.activo IS
@@ -378,8 +359,8 @@ CREATE TABLE presupuesto (
   id_presupuesto        SERIAL PRIMARY KEY,
   id_cliente            INT NOT NULL REFERENCES cliente(id_cliente),
   id_categoria_servicio INT REFERENCES categoria_servicio(id_categoria_servicio),
-  fecha_emision         TIMESTAMP NOT NULL DEFAULT now(),
-  monto_total           NUMERIC(14,2) NOT NULL DEFAULT 0,
+  fecha_emision         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  monto_total           NUMERIC(14,0) NOT NULL DEFAULT 0,
   estado                VARCHAR(30) NOT NULL DEFAULT 'Pendiente'
                         CHECK (estado IN ('Pendiente', 'Aprobado', 'Rechazado')),
   origen                VARCHAR(20) NOT NULL DEFAULT 'Oficina'
@@ -396,9 +377,9 @@ COMMENT ON COLUMN presupuesto.id_cliente IS
 COMMENT ON COLUMN presupuesto.id_categoria_servicio IS
   'Categoría elegida en el presupuesto detallado. Entero y clave foránea hacia categoria_servicio(id_categoria_servicio). Admite NULL para conservar presupuestos manuales anteriores; el backend exige categoría en los nuevos presupuestos detallados.';
 COMMENT ON COLUMN presupuesto.fecha_emision IS
-  'Fecha y hora de creación del presupuesto. TIMESTAMP sin zona horaria, obligatorio y con valor predeterminado now(), correspondiente al inicio de la transacción si no se proporciona otro valor.';
+  'Fecha y hora de creación del presupuesto. TIMESTAMPTZ, presentado en America/Santiago, obligatorio y con valor predeterminado now(), correspondiente al inicio de la transacción si no se proporciona otro valor.';
 COMMENT ON COLUMN presupuesto.monto_total IS
-  'Importe total del presupuesto en CLP, incluido IVA del 19 %. NUMERIC(14,2), obligatorio y predeterminado cero. En presupuestos detallados el backend suma las líneas netas redondeadas al peso y añade el IVA redondeado al peso; conserva el importe ingresado en presupuestos manuales anteriores, sin recalcularlo.';
+  'Importe total del presupuesto en CLP, incluido IVA del 19 %. NUMERIC(14,0), obligatorio y predeterminado cero, expresado en pesos enteros. En presupuestos detallados el backend suma las líneas netas redondeadas al peso y añade el IVA redondeado al peso; los presupuestos manuales anteriores también exigen pesos enteros, sin recalcular su importe.';
 COMMENT ON COLUMN presupuesto.estado IS
   'Estado del presupuesto. Texto de hasta 30 caracteres, obligatorio y predeterminado Pendiente; CHECK admite Pendiente, Aprobado o Rechazado.';
 COMMENT ON COLUMN presupuesto.origen IS
@@ -431,8 +412,8 @@ CREATE TABLE obra (
   estado                 VARCHAR(20) NOT NULL DEFAULT 'En proceso'
   CHECK (estado IN ('En proceso', 'Finalizada', 'Suspendida', 'Cancelada')),
   sin_materiales         BOOLEAN NOT NULL DEFAULT FALSE,
-  fecha_creacion         TIMESTAMP NOT NULL DEFAULT now(),
-  fecha_cierre           TIMESTAMP,
+  fecha_creacion         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  fecha_cierre           TIMESTAMPTZ,
   firma_conformidad      TEXT
 );
 
@@ -451,9 +432,9 @@ COMMENT ON COLUMN obra.estado IS
 COMMENT ON COLUMN obra.sin_materiales IS
   'Declaración de que el trabajo no utiliza materiales. Booleano obligatorio y predeterminado FALSE. Al finalizar, el backend comprueba que esta declaración sea compatible con los egresos vigentes y los consumos registrados.';
 COMMENT ON COLUMN obra.fecha_creacion IS
-  'Fecha y hora de creación de la obra. TIMESTAMP sin zona horaria, obligatorio y con valor predeterminado now(), correspondiente al inicio de la transacción si no se proporciona otro valor.';
+  'Fecha y hora de creación de la obra. TIMESTAMPTZ, presentado en America/Santiago, obligatorio y con valor predeterminado now(), correspondiente al inicio de la transacción si no se proporciona otro valor.';
 COMMENT ON COLUMN obra.fecha_cierre IS
-  'Fecha y hora de finalización confirmada desde el ERP. TIMESTAMP sin zona horaria que admite NULL; el backend la establece al pasar al estado Finalizada. No representa la fecha de suspensión o cancelación.';
+  'Fecha y hora de finalización confirmada desde el ERP. TIMESTAMPTZ, presentado en America/Santiago que admite NULL; el backend la establece al pasar al estado Finalizada. No representa la fecha de suspensión o cancelación.';
 COMMENT ON COLUMN obra.firma_conformidad IS
   'Firma de conformidad del cliente. TEXT que admite NULL, con trazos comprimidos y codificados en texto. Gamma la guarda al entregar el trabajo para revisión, conservando el estado En proceso. El supervisor o Administrador General confirma después la finalización desde el ERP y establece fecha_cierre. El trazo no se copia a auditoría ni se incluye en descargas de Gamma; se puede consultar en modo de solo lectura desde el detalle de la obra finalizada en el ERP.';
 
@@ -472,7 +453,7 @@ CREATE TABLE documento_tributario (
   id_proveedor             INT REFERENCES proveedor(id_proveedor),
   id_obra                  INT REFERENCES obra(id_obra),
   id_documento_referencia  INT REFERENCES documento_tributario(id_documento),
-  monto_neto_correccion    NUMERIC(14,2),
+  monto_neto_correccion    NUMERIC(14,0),
   CONSTRAINT chk_monto_nota_credito CHECK (
     (tipo_documento = 'nota_credito' AND monto_neto_correccion IS NOT NULL AND monto_neto_correccion > 0)
     OR (tipo_documento <> 'nota_credito' AND monto_neto_correccion IS NULL)
@@ -484,10 +465,25 @@ CREATE TABLE documento_tributario (
     CHECK (tipo_documento <> 'factura' OR fecha_vencimiento IS NOT NULL)
 );
 
+-- Impide duplicar proveedor, tipo y folio, incluso con registros simultáneos.
+-- Permite el mismo folio en otro proveedor o en un tipo de documento distinto.
+CREATE UNIQUE INDEX uq_doc_proveedor_folio
+  ON documento_tributario (id_proveedor, tipo_documento, folio)
+  WHERE id_proveedor IS NOT NULL;
+COMMENT ON INDEX uq_doc_proveedor_folio IS
+  'Unicidad de documentos por proveedor, tipo y folio; excluye los documentos de clientes.';
+
+-- Búsqueda de facturas de una obra y notas de crédito de un documento original.
+-- El índice único anterior ya cubre las búsquedas por id_proveedor.
+CREATE INDEX idx_documento_obra ON documento_tributario (id_obra)
+  WHERE id_obra IS NOT NULL;
+CREATE INDEX idx_documento_referencia ON documento_tributario (id_documento_referencia)
+  WHERE id_documento_referencia IS NOT NULL;
+
 COMMENT ON TABLE documento_tributario IS
   'Documentos de un proveedor o cliente. Las NC de proveedores corrigen montos de facturas sin materiales ni movimientos de stock; reducen el saldo junto con los pagos registrados. Los totales se calculan al consultar.';
 COMMENT ON COLUMN documento_tributario.monto_neto_correccion IS
-  'Rebaja neta global de una nota de credito. NUMERIC(14,2), obligatorio y positivo para NC mediante CHECK; NULL para los otros tipos. IVA fijo de 19% y total calculados sin duplicar columnas.';
+  'Rebaja neta global de una nota de crédito en pesos enteros. NUMERIC(14,0), obligatorio y positivo para NC mediante CHECK; NULL para los otros tipos. IVA y total se calculan con tasa_iva, copiada de la factura original, sin duplicar columnas. El backend rechaza importes con fracciones de peso.';
 COMMENT ON COLUMN documento_tributario.id_documento IS
   'Identificador del documento. Clave primaria entera, autoincremental y no nula.';
 COMMENT ON COLUMN documento_tributario.tipo_documento IS
@@ -532,7 +528,7 @@ COMMENT ON COLUMN factura_guia.id_guia IS
 CREATE TABLE pago_documento (
   id_pago        SERIAL PRIMARY KEY,
   id_documento   INT NOT NULL REFERENCES documento_tributario(id_documento),
-  monto          NUMERIC(16,2) NOT NULL CHECK (monto > 0),
+  monto          NUMERIC(14,0) NOT NULL CHECK (monto > 0),
   fecha_pago     DATE NOT NULL,
   id_usuario     INT NOT NULL REFERENCES usuario(id_usuario),
   fecha_registro TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -548,7 +544,7 @@ COMMENT ON COLUMN pago_documento.id_pago IS
 COMMENT ON COLUMN pago_documento.id_documento IS
   'Documento al que corresponde el abono. Entero obligatorio y FK hacia documento_tributario(id_documento); un documento admite varios pagos.';
 COMMENT ON COLUMN pago_documento.monto IS
-  'Monto del abono en CLP. NUMERIC(16,2) obligatorio y mayor que cero, con hasta catorce enteros y dos decimales. El backend impide superar el saldo mediante bloqueo del documento.';
+  'Monto del abono en CLP. NUMERIC(14,0), obligatorio y mayor que cero, con hasta catorce dígitos enteros y sin decimales. El backend rechaza fracciones de peso e impide superar el saldo mediante bloqueo del documento.';
 COMMENT ON COLUMN pago_documento.fecha_pago IS
   'Fecha efectiva del pago, elegida al registrar el abono. DATE obligatorio.';
 COMMENT ON COLUMN pago_documento.id_usuario IS
@@ -571,6 +567,9 @@ CREATE TABLE detalle_documento (
   descuento_3 NUMERIC(5,2) NOT NULL DEFAULT 0 CHECK (descuento_3 BETWEEN 0 AND 100),
   observaciones TEXT
 );
+
+-- Recupera las líneas de un documento sin recorrer el detalle de todas las compras.
+CREATE INDEX idx_detalle_documento_documento ON detalle_documento (id_documento);
 
 COMMENT ON TABLE detalle_documento IS
   'Materiales incluidos en un documento, con cantidad documentada, costo unitario, copia del precio de lista y descuentos por producto. No representa la recepción física: lo recibido y pendiente se calcula desde los ingresos y sus reversas en el Cardex. El backend bloquea cambios de materiales y costos cuando existen ingresos asociados al documento.';
@@ -602,7 +601,7 @@ CREATE TABLE recepcion_material (
   id_recepcion        SERIAL PRIMARY KEY,
   id_usuario_receptor INT NOT NULL REFERENCES usuario(id_usuario),
   firma               TEXT,
-  fecha_firma         TIMESTAMP,
+  fecha_firma         TIMESTAMPTZ,
   -- Sin firma queda pendiente; firma y fecha se completan juntas al confirmar.
   CONSTRAINT chk_firma_recepcion CHECK (
     (firma IS NULL AND fecha_firma IS NULL)
@@ -619,7 +618,7 @@ COMMENT ON COLUMN recepcion_material.id_usuario_receptor IS
 COMMENT ON COLUMN recepcion_material.firma IS
   'Firma del técnico como constancia de recepción. TEXT que admite NULL mientras está pendiente; guarda trazos comprimidos y codificados en texto. CHECK impide una firma vacía o sin fecha_firma. El backend valida y guarda la firma al sincronizar la confirmación desde Gamma.';
 COMMENT ON COLUMN recepcion_material.fecha_firma IS
-  'Fecha y hora en que el servidor registra la firma al confirmar la recepción. TIMESTAMP sin zona horaria, sin valor predeterminado y que admite NULL mientras está pendiente. El backend asigna now() junto con la firma; CHECK impide una fecha sin firma.';
+  'Fecha y hora en que el servidor registra la firma al confirmar la recepción. TIMESTAMPTZ, presentado en America/Santiago, sin valor predeterminado y que admite NULL mientras está pendiente. El backend asigna now() junto con la firma; CHECK impide una fecha sin firma.';
 
 CREATE TABLE movimiento_cardex (
   id_movimiento            SERIAL PRIMARY KEY,
@@ -638,7 +637,7 @@ CREATE TABLE movimiento_cardex (
   cantidad                 NUMERIC(12,3) NOT NULL,
   costo_unitario           NUMERIC(14,4) NOT NULL DEFAULT 0,
   precio_lista_vigente     NUMERIC(14,0) CHECK (precio_lista_vigente >= 0), -- Precio comercial al confirmar el egreso, separado del costo.
-  fecha_hora               TIMESTAMP NOT NULL DEFAULT now(),
+  fecha_hora               TIMESTAMPTZ NOT NULL DEFAULT now(),
   justificacion            TEXT, -- Motivo u observaciones del movimiento.
   -- Cliente y presupuesto se consultan desde la obra asociada, sin duplicarlos.
   CONSTRAINT chk_datos_egreso CHECK (
@@ -649,6 +648,17 @@ CREATE TABLE movimiento_cardex (
     (tipo_movimiento = 'USO_INTERNO') = (id_recepcion IS NOT NULL)
   )
 );
+
+-- El orden del índice coincide con el historial paginado y la consulta del último ingreso.
+CREATE INDEX idx_cardex_articulo_historial
+  ON movimiento_cardex (id_articulo, fecha_hora DESC, id_movimiento DESC);
+-- Apoyan egresos por obra, recepciones de compras y cálculo de cantidades revertidas.
+CREATE INDEX idx_cardex_obra ON movimiento_cardex (id_obra)
+  WHERE id_obra IS NOT NULL;
+CREATE INDEX idx_cardex_detalle_documento ON movimiento_cardex (id_detalle_documento)
+  WHERE id_detalle_documento IS NOT NULL;
+CREATE INDEX idx_cardex_revertido ON movimiento_cardex (id_movimiento_revertido)
+  WHERE id_movimiento_revertido IS NOT NULL;
 
 COMMENT ON TABLE movimiento_cardex IS
   'Historial de movimientos de artículos. El backend registra movimiento, cambios de stock y PMP y auditoría en una misma transacción; las correcciones se registran mediante nuevos movimientos de reversa, sin editar el original. Las cantidades de salidas no deben interpretarse solo por su signo: el efecto depende del tipo de movimiento.';
@@ -677,13 +687,13 @@ COMMENT ON COLUMN movimiento_cardex.costo_unitario IS
 COMMENT ON COLUMN movimiento_cardex.precio_lista_vigente IS
   'Copia del precio de lista comercial unitario, con IVA incluido, al confirmar un EGRESO. NUMERIC(14,0), no negativo mediante CHECK y obligatorio para EGRESO mediante chk_datos_egreso; los demás tipos admiten NULL. El backend lo obtiene del catálogo, separado del costo unitario.';
 COMMENT ON COLUMN movimiento_cardex.fecha_hora IS
-  'Fecha y hora de referencia del movimiento. TIMESTAMP sin zona horaria, obligatorio y con valor predeterminado now(), correspondiente al inicio de la transacción si no se proporciona otro valor.';
+  'Fecha y hora de referencia del movimiento. TIMESTAMPTZ, presentado en America/Santiago, obligatorio y con valor predeterminado now(), correspondiente al inicio de la transacción si no se proporciona otro valor.';
 COMMENT ON COLUMN movimiento_cardex.justificacion IS
   'Motivo u observaciones del movimiento. TEXT que admite NULL en el schema. El formulario de movimientos exige una justificación; en recepciones de compras se utiliza la observación opcional de la recepción.';
 
 CREATE TABLE inventario_fisico (
   id_inventario         SERIAL PRIMARY KEY,
-  fecha_conteo          TIMESTAMP NOT NULL DEFAULT now(),
+  fecha_conteo          TIMESTAMPTZ NOT NULL DEFAULT now(),
   id_usuario            INT NOT NULL REFERENCES usuario(id_usuario),
   estado                VARCHAR(20) NOT NULL DEFAULT 'En proceso'
   CHECK (estado IN ('En proceso', 'Finalizado'))
@@ -694,7 +704,7 @@ COMMENT ON TABLE inventario_fisico IS
 COMMENT ON COLUMN inventario_fisico.id_inventario IS
   'Identificador del conteo físico. Clave primaria entera, autoincremental y no nula.';
 COMMENT ON COLUMN inventario_fisico.fecha_conteo IS
-  'Fecha y hora de creación del conteo. TIMESTAMP sin zona horaria, obligatorio y con valor predeterminado now(), correspondiente al inicio de la transacción. No representa una referencia simultánea del stock de todos los artículos: cada detalle toma su referencia al contarse por primera vez.';
+  'Fecha y hora de creación del conteo. TIMESTAMPTZ, presentado en America/Santiago, obligatorio y con valor predeterminado now(), correspondiente al inicio de la transacción. No representa una referencia simultánea del stock de todos los artículos: cada detalle toma su referencia al contarse por primera vez.';
 COMMENT ON COLUMN inventario_fisico.id_usuario IS
   'Usuario que crea el conteo, obtenido por el backend desde la identidad autenticada. Entero obligatorio y clave foránea hacia usuario(id_usuario). Los responsables de guardados y cierre se registran en la auditoría.';
 COMMENT ON COLUMN inventario_fisico.estado IS
@@ -742,7 +752,7 @@ CREATE TABLE hoja_de_servicio (
   id_hoja_servicio      SERIAL PRIMARY KEY,
   id_detalle_presupuesto INT NOT NULL UNIQUE REFERENCES detalle_presupuesto(id_detalle_presupuesto),
   id_usuario            INT NOT NULL REFERENCES usuario(id_usuario),
-  fecha_servicio        TIMESTAMP NOT NULL DEFAULT now(),
+  fecha_servicio        TIMESTAMPTZ NOT NULL DEFAULT now(),
   horas_trabajadas      NUMERIC(5,2) NOT NULL DEFAULT 0 CHECK (horas_trabajadas >= 0 AND horas_trabajadas <> 'NaN'::numeric),
   estado                VARCHAR(20) NOT NULL DEFAULT 'Borrador' CHECK (estado IN ('Borrador', 'Completada')),
   id_operacion_offline  VARCHAR(64) NOT NULL UNIQUE
@@ -756,7 +766,7 @@ COMMENT ON COLUMN hoja_de_servicio.id_detalle_presupuesto IS
 COMMENT ON COLUMN hoja_de_servicio.id_usuario IS
   'Técnico que registra la hoja, obtenido desde la identidad autenticada. Entero obligatorio y clave foránea hacia usuario(id_usuario). El backend valida que pueda trabajar en la obra y continuar esta hoja.';
 COMMENT ON COLUMN hoja_de_servicio.fecha_servicio IS
-  'Fecha y hora del servicio informadas desde Gamma. TIMESTAMP sin zona horaria, obligatorio y con valor predeterminado now() si se omite. El backend guarda la fecha enviada y permite actualizarla mientras la hoja permanece en Borrador; no equivale necesariamente al momento de sincronización.';
+  'Fecha del servicio informada desde Gamma. TIMESTAMPTZ presentado en America/Santiago, obligatorio y con valor predeterminado now() si se omite. Gamma envía un día de calendario y el backend lo convierte explícitamente a medianoche de Santiago; permite actualizarlo mientras la hoja permanece en Borrador. No equivale necesariamente al momento de sincronización.';
 COMMENT ON COLUMN hoja_de_servicio.horas_trabajadas IS
   'Tiempo trabajado acumulado en la hoja, expresado en horas decimales. NUMERIC(5,2), obligatorio y predeterminado cero; CHECK impide valores negativos y NaN. La interfaz convierte horas y minutos al valor decimal, sin columnas adicionales; el backend exige tiempo mayor que cero para completar la hoja.';
 COMMENT ON COLUMN hoja_de_servicio.estado IS
@@ -823,7 +833,7 @@ COMMENT ON COLUMN material_utilizado.id_operacion_offline IS
 -- Solo los ingresos respaldados por proveedor aportan al importe de compras, redondeado a pesos.
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_resumen_movimientos AS
 WITH base AS (
-  SELECT date_trunc('month', m.fecha_hora)::date AS mes,
+  SELECT date_trunc('month', m.fecha_hora AT TIME ZONE 'America/Santiago')::date AS mes,
     m.id_articulo, a.codigo_interno, a.nombre, a.unidad_medida,
     m.tipo_movimiento,
     CASE WHEN m.tipo_movimiento = 'REVERSA' THEN original.tipo_movimiento
@@ -855,7 +865,7 @@ COMMENT ON MATERIALIZED VIEW mv_resumen_movimientos IS
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_resumen_documentos AS
 SELECT d.id_documento, d.id_proveedor, d.folio, d.tipo_documento, d.fecha_vencimiento, p.razon_social,
   ((CASE WHEN d.tipo_documento='nota_credito' AND d.monto_neto_correccion IS NOT NULL
-    THEN ROUND(d.monto_neto_correccion,0) + ROUND(ROUND(d.monto_neto_correccion,0) * 19 / 100,0)
+    THEN ROUND(d.monto_neto_correccion,0) + ROUND(ROUND(d.monto_neto_correccion,0) * d.tasa_iva / 100,0)
     WHEN EXISTS(SELECT 1 FROM factura_guia fg WHERE fg.id_factura=d.id_documento)
     THEN (SELECT COALESCE(SUM((SELECT CASE WHEN g.tipo_documento='boleta' THEN importe ELSE importe + ROUND(importe * g.tasa_iva / 100,0) END
         FROM (SELECT general - ROUND(general * g.descuento_pronto_pago / 100,0) AS importe
@@ -877,7 +887,7 @@ SELECT d.id_documento, d.id_proveedor, d.folio, d.tipo_documento, d.fecha_vencim
                     CROSS JOIN LATERAL (SELECT b.valor-ROUND(b.valor*l.descuento_1/100,0) AS valor) p1
                     CROSS JOIN LATERAL (SELECT p1.valor-ROUND(p1.valor*l.descuento_2/100,0) AS valor) p2
                     CROSS JOIN LATERAL (SELECT p2.valor-ROUND(p2.valor*l.descuento_3/100,0) AS valor) p3
-                    WHERE l.id_documento=d.id_documento) lineas) generales) importes) END) - COALESCE((SELECT SUM(a.monto) FROM pago_documento a WHERE a.id_documento=d.id_documento),0) - COALESCE((SELECT SUM(ROUND(nc.monto_neto_correccion,0) + ROUND(ROUND(nc.monto_neto_correccion,0) * 19 / 100,0))
+                    WHERE l.id_documento=d.id_documento) lineas) generales) importes) END) - COALESCE((SELECT SUM(a.monto) FROM pago_documento a WHERE a.id_documento=d.id_documento),0) - COALESCE((SELECT SUM(ROUND(nc.monto_neto_correccion,0) + ROUND(ROUND(nc.monto_neto_correccion,0) * nc.tasa_iva / 100,0))
     FROM documento_tributario nc WHERE nc.id_documento_referencia=d.id_documento
     AND nc.tipo_documento='nota_credito'),0)) AS saldo
 FROM documento_tributario d JOIN proveedor p USING (id_proveedor)
@@ -900,8 +910,8 @@ COMMENT ON MATERIALIZED VIEW mv_resumen_stock IS 'Artículos activos en mínimo 
 -- Cuenta presupuestos por mes de emisión y estado actual al refrescar.
 -- Permite mostrar cantidades de pendientes, aprobados y rechazados sin recorrer sus detalles.
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_resumen_presupuestos AS
-SELECT date_trunc('month', fecha_emision)::date AS mes, estado, COUNT(*)::int AS cantidad
-FROM presupuesto GROUP BY date_trunc('month', fecha_emision)::date, estado;
+SELECT date_trunc('month', fecha_emision AT TIME ZONE 'America/Santiago')::date AS mes, estado, COUNT(*)::int AS cantidad
+FROM presupuesto GROUP BY date_trunc('month', fecha_emision AT TIME ZONE 'America/Santiago')::date, estado;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_mv_resumen_presupuestos ON mv_resumen_presupuestos (mes, estado);
 COMMENT ON MATERIALIZED VIEW mv_resumen_presupuestos IS
   'Cantidad de presupuestos agrupados por mes de emisión y estado al refrescar. No conserva el historial de cambios de estado ni suma importes.';
@@ -909,9 +919,9 @@ COMMENT ON MATERIALIZED VIEW mv_resumen_presupuestos IS
 -- Cuenta obras por estado y mes de cierre para mostrar obras en proceso y servicios finalizados.
 -- La fecha técnica 0001-01-01 agrupa las obras sin fecha_cierre; no es una fecha real del trabajo.
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_resumen_obras AS
-SELECT estado, COALESCE(date_trunc('month', fecha_cierre)::date, DATE '0001-01-01') AS mes_cierre,
+SELECT estado, COALESCE(date_trunc('month', fecha_cierre AT TIME ZONE 'America/Santiago')::date, DATE '0001-01-01') AS mes_cierre,
   COUNT(*)::int AS cantidad
-FROM obra GROUP BY estado, COALESCE(date_trunc('month', fecha_cierre)::date, DATE '0001-01-01');
+FROM obra GROUP BY estado, COALESCE(date_trunc('month', fecha_cierre AT TIME ZONE 'America/Santiago')::date, DATE '0001-01-01');
 CREATE UNIQUE INDEX IF NOT EXISTS uq_mv_resumen_obras ON mv_resumen_obras (estado, mes_cierre);
 COMMENT ON MATERIALIZED VIEW mv_resumen_obras IS 'Obras por estado y mes de cierre; 0001-01-01 representa ausencia de cierre.';
 

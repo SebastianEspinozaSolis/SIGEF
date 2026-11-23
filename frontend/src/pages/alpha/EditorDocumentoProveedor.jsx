@@ -1,4 +1,5 @@
 import { pesos, evitarCambioConRueda } from '../../utils/importes';
+import { fechaSantiago } from '../../utils/fechas';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api/cliente';
@@ -9,8 +10,7 @@ import { tiposDocumento } from './configuracionFichas';
 import './alpha.css';
 
 function hoy() {
-    const fecha = new Date();
-    return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+    return fechaSantiago();
 }
 export default function EditorDocumentoProveedor() {
     const { proveedor, id } = useParams();
@@ -49,7 +49,8 @@ function FormularioDocumento({ proveedor, documento }) {
     const esBoleta = form.tipo_documento === 'boleta';
     const esNota = form.tipo_documento === 'nota_credito';
     const [facturaOriginal, setFacturaOriginal] = useState(null);
-    const rebaja = calcularRebaja(form.monto_neto_correccion);
+    const tasaRebaja = esNotaRegistrada ? form.tasa_iva : facturaOriginal?.tasa_iva ?? '19';
+    const rebaja = calcularRebaja(form.monto_neto_correccion, tasaRebaja);
     const excedeSaldo = Boolean(rebaja && facturaOriginal && rebaja.totalCentavos > centavos(facturaOriginal.saldo_pendiente));
     const siguiente = useRef(0);
     const [guardando, setGuardando] = useState(false);
@@ -108,7 +109,7 @@ function FormularioDocumento({ proveedor, documento }) {
             </>}
             {esNota && <section><h2>Rebaja de la factura</h2>
                 <label>Monto neto de descuento o corrección (CLP) *<input name="monto_neto_correccion" type="number" min="1" step="1" inputMode="numeric" onWheel={evitarCambioConRueda} required value={form.monto_neto_correccion} onChange={cambiar} /></label>
-                {rebaja && <dl><dt>Neto a rebajar</dt><dd>{pesos(form.monto_neto_correccion)} CLP</dd><dt>IVA (19 %)</dt><dd>{pesos(rebaja.iva)} CLP</dd><dt>Total a rebajar</dt><dd>{pesos(rebaja.total)} CLP</dd></dl>}
+                {rebaja && <dl><dt>Neto a rebajar</dt><dd>{pesos(form.monto_neto_correccion)} CLP</dd><dt>IVA ({Number(tasaRebaja)} %)</dt><dd>{pesos(rebaja.iva)} CLP</dd><dt>Total a rebajar</dt><dd>{pesos(rebaja.total)} CLP</dd></dl>}
                 {facturaOriginal && <p>Saldo pendiente de la factura: {pesos(facturaOriginal.saldo_pendiente)} CLP.</p>}
                 {excedeSaldo && <p role="alert">El total a rebajar supera el saldo pendiente de la factura.</p>}
             </section>}
@@ -139,7 +140,7 @@ function FormularioDocumento({ proveedor, documento }) {
                 </label>)}
             </div>
             <p>Estos descuentos se aplican al conjunto del documento, después de los descuentos de cada material.</p>
-            <p>IVA: {form.tipo_documento === 'nota_credito' ? form.tasa_iva : '19'} % {esBoleta ? "incluido en los precios" : form.tipo_documento === "guia_despacho" ? "referencial; la guía no genera deuda" : "sobre el neto"}.</p>
+            <p>IVA: {esNota ? Number(tasaRebaja) : '19'} % {esBoleta ? "incluido en los precios" : form.tipo_documento === "guia_despacho" ? "referencial; la guía no genera deuda" : "sobre el neto"}.</p>
             <p>Los totales se calculan desde los materiales, descuentos y tasa de IVA.</p>
             {documento && <p>Totales del documento: subtotal {pesos(documento.subtotal)}, neto {pesos(documento.total_neto)}, IVA {pesos(documento.iva)}, total {pesos(documento.total)} CLP.</p>}
             </fieldset>}
@@ -274,9 +275,9 @@ function centavos(valor) {
     const [entero, fraccion = ''] = String(valor).split('.');
     return BigInt(entero) * 100n + BigInt(fraccion.padEnd(2, '0'));
 }
-function calcularRebaja(valor) {
+function calcularRebaja(valor, tasa) {
     const neto = ((centavos(valor)+50n)/100n)*100n;
     if (neto <= 0n) return null;
-    const iva = ((neto * 19n + 5000n) / 10000n)*100n;
+    const iva = ((neto * centavos(tasa) + 500000n) / 1000000n)*100n;
     return { iva: Number(iva) / 100, total: Number(neto + iva) / 100, totalCentavos: neto + iva };
 }

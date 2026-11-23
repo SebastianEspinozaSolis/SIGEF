@@ -7,7 +7,7 @@ export default function ResumenTrabajo({ hojas = [], fechaCierre }) {
         <h2>Resumen del trabajo</h2>
         <p>Hojas completadas: {hojas.filter(h=>h.estado==='Completada').length} de {hojas.length}</p>
         <p><strong>Tiempo total registrado: {tiempo(total)}</strong></p>
-        {fechaCierre && <p>Finalización: {new Date(fechaCierre).toLocaleString('es-CL')}</p>}
+        {fechaCierre && <p>Finalización: {new Date(fechaCierre).toLocaleString('es-CL', { timeZone: 'America/Santiago' })}</p>}
         {hojas.map(h=><article key={h.id_detalle_presupuesto}>
             <h3>{h.descripcion}</h3>
             <p>{h.estado} · {tiempo(minutos(h.horas_trabajadas))}</p>

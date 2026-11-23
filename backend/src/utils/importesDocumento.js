@@ -37,7 +37,7 @@ function calcularDetalle(d, cabecera = {}) {
 function calcular(cabecera, detalles) {
     if (cabecera.tipo_documento === 'nota_credito' && cabecera.monto_neto_correccion != null) {
         const neto = pesosCentavos(escalar(cabecera.monto_neto_correccion, 2));
-        const iva = redondear(neto * 19n, 10000n)*100n;
+        const iva = redondear(neto * escalar(cabecera.tasa_iva ?? 19, 2), 1000000n)*100n;
         return {subtotal:decimal(neto,2),descuento_productos:'0.00',neto_productos:decimal(neto,2),
             importe_descuento_general:'0.00',importe_descuento_pronto_pago:'0.00',
             total_neto:decimal(neto,2),iva:decimal(iva,2),total:decimal(neto+iva,2)};

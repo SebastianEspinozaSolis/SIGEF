@@ -1,15 +1,16 @@
 import { hojaActual } from '../../utils/hojasTerreno';
+import { fechaSantiago } from '../../utils/fechas';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import useBorrador from '../../hooks/useBorradorGamma';
 import { guardarOperacion, corregirHojaRechazada } from '../../utils/gammaOffline';
 
 export default function HojaTarea({ usuarioId, snapshot, operaciones, obra, tarea, alGuardar }) {
-    const [fechaInicial]=useState(()=>new Date().toLocaleDateString('sv-SE'));
+    const [fechaInicial]=useState(()=>fechaSantiago());
     const fuente=hojaActual(snapshot,operaciones,tarea.id_detalle_presupuesto);
     const inicial={id_obra:obra.id_obra,id_detalle_presupuesto:tarea.id_detalle_presupuesto,
         operacion_base:fuente?.id_operacion_offline || null,estado:fuente?.estado || 'Borrador',
-        fecha_servicio:fuente?.fecha_servicio?.slice(0,10) || fechaInicial,
+        fecha_servicio:fuente?.fecha_servicio ? fechaSantiago(fuente.fecha_servicio) : fechaInicial,
         horas_trabajadas:fuente?.horas_trabajadas || '0',
         respuestas:fuente?.respuestas || (snapshot.items || []).filter(i=>i.id_tarea===tarea.id_tarea).map(i=>({id_item:i.id_item,pregunta:i.pregunta,estado:'Pendiente',observacion:''})),
         materiales:fuente?.materiales || []};

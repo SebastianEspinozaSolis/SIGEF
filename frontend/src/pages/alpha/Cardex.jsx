@@ -62,7 +62,7 @@ function HistorialArticulo({ id }) {
             <div className="alpha-tabla"><table>
                 <thead><tr>{['Movimiento', 'Fecha', 'Tipo', 'Cantidad', 'Costo unitario (CLP)', 'Responsable', 'Receptor', 'Obra', 'Movimiento de origen', 'Justificación'].map((t) => <th key={t}>{t}</th>)}</tr></thead>
                 <tbody>{datos.registros.map((m) => <tr key={m.id_movimiento}>
-                    <td>#{m.id_movimiento}</td><td>{new Date(m.fecha_hora).toLocaleString('es-CL')}</td><td>{tiposMovimiento.find(([valor]) => valor === m.tipo_movimiento)?.[1] || m.tipo_movimiento}</td>
+                    <td>#{m.id_movimiento}</td><td>{new Date(m.fecha_hora).toLocaleString('es-CL', { timeZone: 'America/Santiago' })}</td><td>{tiposMovimiento.find(([valor]) => valor === m.tipo_movimiento)?.[1] || m.tipo_movimiento}</td>
                     <td>{cantidadVisible(m.cantidad)}</td><td>{pesos(m.costo_unitario)}</td><td>{m.nombres} {m.apellidos}</td>
                     <td>{m.receptor_nombres ? `${m.receptor_nombres} ${m.receptor_apellidos}` : '—'}</td>
                     <td>{m.id_obra ?? '—'}</td><td>{(m.id_movimiento_revertido || m.id_movimiento_origen) ? `${tiposMovimiento.find(([valor]) => valor === m.tipo_movimiento_original)?.[1] || 'Movimiento'} #${m.id_movimiento_revertido || m.id_movimiento_origen} — ${m.cantidad_original == null ? '—' : cantidadVisible(m.cantidad_original)} ${datos.articulo.unidad_medida}` : '—'}</td><td>{m.justificacion || '—'}</td>

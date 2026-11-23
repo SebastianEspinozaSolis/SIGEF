@@ -1,6 +1,7 @@
 import useBorrador from '../../hooks/useBorradorGamma';
 import HojaTarea from './HojaTarea';
 import { hojaActual } from '../../utils/hojasTerreno';
+import { fechaSantiago } from '../../utils/fechas';
 import { pesos, evitarCambioConRueda } from '../../utils/importes';
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Route, Routes, useParams, useLocation } from 'react-router-dom';
@@ -11,10 +12,7 @@ import Firma from './Firma';
 import ResumenTrabajo from '../../components/ResumenTrabajo';
 import './gamma.css';
 
-const fechaHoy = () => {
-    const fecha = new Date();
-    return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
-};
+const fechaHoy = () => fechaSantiago();
 const errorTexto = error => error?.message || error?.mensaje || 'No se pudo completar la operación.';
 const obraNombre = obra => obra.nombre_obra || `Obra ${obra.id_obra}`;
 
@@ -267,7 +265,7 @@ export default function PortalGamma() {
         {error && <p role="alert">{error}</p>}{mensaje && rutaMensaje === ubicacion.pathname && <p role="status">{mensaje}</p>}
         {cargando ? <p role="status">Cargando datos del dispositivo...</p> : <Routes>
             <Route index element={<>
-                <section className="gamma-panel" aria-label="Datos del dispositivo"><p>Última descarga: {snapshot?.actualizado_en ? new Date(snapshot.actualizado_en).toLocaleString('es-CL') : 'Sin datos descargados'}</p>
+                <section className="gamma-panel" aria-label="Datos del dispositivo"><p>Última descarga: {snapshot?.actualizado_en ? new Date(snapshot.actualizado_en).toLocaleString('es-CL', { timeZone: 'America/Santiago' }) : 'Sin datos descargados'}</p>
                     <button disabled={ocupado || !online} onClick={()=>ejecutar('descargar')}>{ocupado?'Procesando...':'Descargar datos'}</button>
                 </section>
                 <nav className="gamma-menu" aria-label="Portal de terreno"><NavLink to="/gamma/obras">Mis obras</NavLink><NavLink to="/gamma/recepciones">Recepciones</NavLink><NavLink to="/gamma/pendientes">Pendientes ({pendientes})</NavLink></nav>

@@ -124,7 +124,7 @@ export default function Auditoria() {
                             <tbody>
                                 {registros.map((r) => (
                                     <tr key={r.id_auditoria}>
-                                        <td>{r.fecha_hora ? new Date(r.fecha_hora).toLocaleString('es-CL') : 'Sin fecha'}</td>
+                                        <td>{r.fecha_hora ? new Date(r.fecha_hora).toLocaleString('es-CL', { timeZone: 'America/Santiago' }) : 'Sin fecha'}</td>
                                         <td>{[r.nombres, r.apellidos].filter(Boolean).join(' ') || 'Usuario no disponible'}</td>
                                         <td>{r.accion}</td>
                                         <td>{r.tabla_afectada}</td>

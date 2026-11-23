@@ -48,7 +48,7 @@ export default function InventarioFisico() {
             <div className="alpha-tabla"><table>
                 <thead><tr><th>Conteo</th><th>Fecha</th><th>Estado</th><th>Artículos contados</th><th>Con diferencia</th><th>Acciones</th></tr></thead>
                 <tbody>{datos.registros.map((i) => <tr key={i.id_inventario}>
-                    <td>#{i.id_inventario}</td><td>{new Date(i.fecha_conteo).toLocaleString('es-CL')}</td><td>{i.estado}</td>
+                    <td>#{i.id_inventario}</td><td>{new Date(i.fecha_conteo).toLocaleString('es-CL', { timeZone: 'America/Santiago' })}</td><td>{i.estado}</td>
                     <td>{i.total_contados ?? 0}</td><td>{i.total_con_diferencia ?? 0}</td>
                     <td><Link to={`/alpha/inventario-fisico/${i.id_inventario}`}>{i.estado === 'En proceso' ? 'Continuar conteo' : 'Ver detalle'}</Link></td>
                 </tr>)}</tbody>

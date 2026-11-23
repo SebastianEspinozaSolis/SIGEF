@@ -166,6 +166,8 @@ async function guardar(proveedor, datos, responsable, documento) {
             await client.query('SELECT id_documento FROM documento_tributario WHERE id_documento=$1 AND id_proveedor=$2 FOR UPDATE', [cabecera.id_documento_referencia,idProveedor]);
             const original = await obtenerCon(client,idProveedor,cabecera.id_documento_referencia);
             if (original.tipo_documento !== 'factura' || original.id_proveedor !== idProveedor) throw new ErrorHttp(400,'Selecciona una factura del mismo proveedor');
+            // La NC conserva la tasa de su factura; el formulario no puede elegir otra.
+            cabecera.tasa_iva = original.tasa_iva;
             if (String(original.saldo_pendiente).startsWith('-') || escalar(original.saldo_pendiente,2) === 0n || escalar(calcular(cabecera,[]).total,2) > escalar(original.saldo_pendiente,2)) throw new ErrorHttp(409,'La rebaja supera el saldo pendiente de la factura');
         }
         if (guias.length && id !== null) throw new ErrorHttp(409, 'Los vínculos de una factura de guías no se pueden reemplazar');

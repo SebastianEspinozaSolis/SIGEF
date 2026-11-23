@@ -60,6 +60,8 @@ function validar(op) {
         if (op.tipo === 'HOJA' && d.firma_cliente_base64) invalido('La firma del cliente corresponde al cierre de la obra');
     } else if (op.tipo === 'PRESUPUESTO') {
         campos(d,['id_obra','monto_total','id_categoria_servicio','detalles']);
+        if (d.detalles === undefined && d.id_categoria_servicio === undefined
+            && !/^\d{1,12}(\.0{1,2})?$/.test(String(d.monto_total))) invalido('Ingresa un monto no negativo, en pesos enteros');
         datos = d.detalles !== undefined || d.id_categoria_servicio !== undefined
             ? {id_obra:idPositivo(d.id_obra), ...validarPresupuesto({...d,id_cliente:1})}
             : {id_obra: idPositivo(d.id_obra), monto_total: numero(d.monto_total,12,2)};
@@ -134,8 +136,8 @@ async function guardarHoja(client, entrada, usuario, uuid) {
         if (!r || !r.firma) throw new ErrorHttp(409,'Firma la recepción antes de utilizar sus materiales');
     }
     const hoja = anterior || (await client.query(`INSERT INTO hoja_de_servicio (id_detalle_presupuesto,id_usuario,fecha_servicio,horas_trabajadas,estado,id_operacion_offline)
-        VALUES ($1,$2,$3,$4,$5,$6) RETURNING id_hoja_servicio`,[d.id_detalle_presupuesto,usuario,d.fecha_servicio,d.horas_trabajadas,d.estado,uuid])).rows[0];
-    if(anterior) await client.query('UPDATE hoja_de_servicio SET fecha_servicio=$2,horas_trabajadas=$3,estado=$4,id_operacion_offline=$5 WHERE id_hoja_servicio=$1',[hoja.id_hoja_servicio,d.fecha_servicio,d.horas_trabajadas,d.estado,uuid]);
+        VALUES ($1,$2,($3::date::timestamp AT TIME ZONE 'America/Santiago'),$4,$5,$6) RETURNING id_hoja_servicio`,[d.id_detalle_presupuesto,usuario,d.fecha_servicio,d.horas_trabajadas,d.estado,uuid])).rows[0];
+    if(anterior) await client.query("UPDATE hoja_de_servicio SET fecha_servicio=($2::date::timestamp AT TIME ZONE 'America/Santiago'),horas_trabajadas=$3,estado=$4,id_operacion_offline=$5 WHERE id_hoja_servicio=$1",[hoja.id_hoja_servicio,d.fecha_servicio,d.horas_trabajadas,d.estado,uuid]);
     await client.query('DELETE FROM respuesta_checklist WHERE id_hoja_servicio=$1',[hoja.id_hoja_servicio]);
     for (const r of d.respuestas) await client.query('INSERT INTO respuesta_checklist (id_hoja_servicio,id_item,pregunta,estado,observacion) VALUES ($1,$2,$3,$4,$5)',[hoja.id_hoja_servicio,r.id_item,r.pregunta,r.estado,r.observacion || null]);
     for (const [indice,m] of d.materiales.entries()) {

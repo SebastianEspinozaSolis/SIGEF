@@ -6,16 +6,16 @@ const { normalizarRut, errorRut } = require('../../utils/validaciones');
 const { validarContacto } = require('../../utils/contactos');
 
 const campos = ['rut_cliente', 'razon_social', 'giro', 'direccion', 'id_comuna', 'ciudad'];
-// Relaciona cada lista de contactos del JSON con su tabla en PostgreSQL.
+// Relaciona cada lista de contactos del JSON con su área en la tabla compartida.
 // Permite recorrer ambas áreas usando la misma lógica de validación y guardado.
 const areas = [
-    { lista: 'contactos_proyecto', tabla: 'contacto_proyecto' },
-    { lista: 'contactos_finanzas', tabla: 'contacto_finanzas' },
+    { lista: 'contactos_proyecto', area: 'Proyecto' },
+    { lista: 'contactos_finanzas', area: 'Finanzas' },
 ];
 
 // Listado y consulta individual comparten los datos completos de la ficha.
-const columnasContactos = areas.map(({ lista, tabla }) =>
-    `COALESCE((SELECT json_agg(p ORDER BY p.id_contacto) FROM ${tabla} p WHERE p.id_cliente=c.id_cliente), '[]'::json) AS ${lista}`);
+const columnasContactos = areas.map(({ lista, area }) =>
+    `COALESCE((SELECT json_agg(p ORDER BY p.id_contacto) FROM contacto_cliente p WHERE p.id_cliente=c.id_cliente AND p.area='${area}'), '[]'::json) AS ${lista}`);
 const consultaFicha = `SELECT c.id_cliente, ${campos.map((campo) => `c.${campo}`).join(', ')}, co.nombre AS comuna, re.id_region, re.nombre AS region, ${columnasContactos.join(', ')}
     FROM cliente c JOIN comuna co ON co.id_comuna=c.id_comuna JOIN region re ON re.id_region=co.id_region`;
 
@@ -99,8 +99,8 @@ async function guardar(datos, idResponsable, idFicha) {
             }
         }
         // Primero comprueba todas las referencias para no modificar contactos de otra empresa o área.
-        for (const { lista, tabla } of areas) {
-            const anteriores = id === null ? [] : (await client.query(`SELECT * FROM ${tabla} WHERE id_cliente=$1 ORDER BY id_contacto`, [id])).rows;
+        for (const { lista, area } of areas) {
+            const anteriores = id === null ? [] : (await client.query('SELECT * FROM contacto_cliente WHERE id_cliente=$1 AND area=$2 ORDER BY id_contacto', [id, area])).rows;
             if (anterior) anterior[lista] = anteriores;
             const propios = new Set(anteriores.map((c) => c.id_contacto));
             if (contactos[lista].some((c) => c.id_contacto !== undefined && !propios.has(c.id_contacto))) {
@@ -112,18 +112,18 @@ async function guardar(datos, idResponsable, idFicha) {
             ? await client.query(`INSERT INTO cliente (${campos.join(', ')}) VALUES (${campos.map((_, i) => `$${i + 1}`).join(', ')}) RETURNING id_cliente, ${campos.join(', ')}`, valores)
             : await client.query(`UPDATE cliente SET ${campos.map((campo, i) => `${campo}=$${i + 1}`).join(', ')} WHERE id_cliente=$7 RETURNING id_cliente, ${campos.join(', ')}`, [...valores, id]);
         const registro = r.rows[0];
-        for (const { lista, tabla } of areas) {
+        for (const { lista, area } of areas) {
             const conservados = contactos[lista].filter((c) => c.id_contacto !== undefined).map((c) => c.id_contacto);
-            if (id !== null) await client.query(`DELETE FROM ${tabla} WHERE id_cliente=$1 AND NOT (id_contacto = ANY($2::int[]))`, [id, conservados]);
+            if (id !== null) await client.query('DELETE FROM contacto_cliente WHERE id_cliente=$1 AND NOT (id_contacto = ANY($2::int[])) AND area=$3', [id, conservados, area]);
             for (const contacto of contactos[lista]) {
                 const valoresContacto = [contacto.nombre, contacto.rut, contacto.cargo, contacto.email, contacto.telefono, registro.id_cliente];
                 if (contacto.id_contacto === undefined) {
-                    await client.query(`INSERT INTO ${tabla} (nombre,rut,cargo,email,telefono,id_cliente) VALUES ($1,$2,$3,$4,$5,$6)`, valoresContacto);
+                    await client.query('INSERT INTO contacto_cliente (nombre,rut,cargo,email,telefono,id_cliente,area) VALUES ($1,$2,$3,$4,$5,$6,$7)', [...valoresContacto, area]);
                 } else {
-                    await client.query(`UPDATE ${tabla} SET nombre=$1,rut=$2,cargo=$3,email=$4,telefono=$5 WHERE id_cliente=$6 AND id_contacto=$7`, [...valoresContacto, contacto.id_contacto]);
+                    await client.query('UPDATE contacto_cliente SET nombre=$1,rut=$2,cargo=$3,email=$4,telefono=$5 WHERE id_cliente=$6 AND id_contacto=$7 AND area=$8', [...valoresContacto, contacto.id_contacto, area]);
                 }
             }
-            registro[lista] = (await client.query(`SELECT * FROM ${tabla} WHERE id_cliente=$1 ORDER BY id_contacto`, [registro.id_cliente])).rows;
+            registro[lista] = (await client.query('SELECT * FROM contacto_cliente WHERE id_cliente=$1 AND area=$2 ORDER BY id_contacto', [registro.id_cliente, area])).rows;
         }
         await registrarAuditoria(client, {
             id_usuario: idResponsable, tabla_afectada: 'cliente', id_registro_afectado: registro.id_cliente,

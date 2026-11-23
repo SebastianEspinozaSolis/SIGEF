@@ -9,7 +9,7 @@ function validar(datos, legado = false) {
     const id_cliente = idPositivo(datos.id_cliente);
     if (legado && datos.id_categoria_servicio == null && (!datos.detalles || datos.detalles.length === 0)) {
         const monto = String(datos.monto_total ?? '').trim();
-        if (!/^\d{1,12}(\.\d{1,2})?$/.test(monto)) errores.monto_total = 'Ingresa un monto no negativo, con hasta dos decimales';
+        if (!/^\d{1,12}(\.0{1,2})?$/.test(monto)) errores.monto_total = 'Ingresa un monto no negativo, en pesos enteros';
         comprobarErrores(errores);
         return { id_cliente, id_categoria_servicio: null, monto_total: monto, detalles: [] };
     }
