@@ -4,4 +4,11 @@ function escalar(valor, precision) {
     return BigInt(entero) * 10n ** BigInt(precision) + BigInt(fraccion.padEnd(precision, '0'));
 }
 
-module.exports = { escalar };
+// Conserva signo y precision al convertir el entero escalado a texto.
+function decimal(n, precision) {
+    const factor = 10n ** BigInt(precision);
+    const absoluto = n < 0n ? -n : n;
+    return `${n < 0n ? '-' : ''}${absoluto / factor}.${String(absoluto % factor).padStart(precision, '0')}`;
+}
+
+module.exports = { escalar, decimal };

@@ -65,7 +65,20 @@ function validarPassword(password) {
     );
 }
 
+// Comprueba el formato y la existencia de una fecha del calendario.
+function fechaValida(valor) {
+    return typeof valor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(valor)
+        && Number.isFinite(Date.parse(`${valor}T00:00:00Z`))
+        && new Date(`${valor}T00:00:00Z`).toISOString().slice(0, 10) === valor;
+}
+
+function uuidValido(valor) {
+    return typeof valor === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(valor);
+}
+
 module.exports = {
+    fechaValida,
+    uuidValido,
     limpiarTexto,
     normalizarRut,
     normalizarTelefono,

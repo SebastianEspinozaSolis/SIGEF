@@ -2,6 +2,32 @@
 
 El backend recibe las peticiones del frontend, comprueba permisos y trabaja con PostgreSQL.
 
+## Abonos y alertas de facturas de clientes
+
+`modules/pagos-documento/service.js` reutiliza `pago_documento` para proveedores y clientes. Para una factura de cliente obtiene el total reconstruido mediante `facturas-cliente/service.js`; las NC de monto y abonos se restan al saldo. Admite pagos parciales y completos en pesos enteros. La factura se bloquea antes de consultar su saldo, igual que al registrar una NC; pagos concurrentes no pueden superar lo pendiente. Pago y auditoría se confirman juntos y el UUID impide duplicar reintentos. Las notas de crédito no reciben abonos. Listado e historial conservan el endpoint `/api/pagos-documento/:id`, restringido a Administración/Administrador General.
+
+`modules/alertas/service.js` añade `clientes-por-vencer` y `clientes-vencidas`. Consulta saldos en vivo, con vencimientos entre hoy y siete días o anteriores a hoy, según America/Santiago. Excluye facturas saldadas, devuelve días restantes y pagina cinco registros. `utils/pagos.js` contiene `totalFacturaClienteSql`, que replica el precio histórico, las reversas y el redondeo al peso del cálculo de factura. No se añaden vistas ni columnas para estas alertas. Los indicadores del resumen materializado siguen siendo independientes.
+
+## Redondeo de CLP
+
+`utils/importesDocumento.js` redondea al peso cada subtotal de línea, cada descuento sucesivo y el IVA antes de sumar. Restar un descuento utiliza el descuento redondeado, no el neto redondeado: sobre $101, un 50 % descuenta $51 y deja $50. La API conserva cadenas con `.00` por compatibilidad; no representa centavos adicionales. Las cantidades, porcentajes y horas siguen admitiendo sus decimales. Costos unitarios y PMP conservan precisión interna; los importes calculados de obra y resumen se redondean por movimiento antes de acumular.
+
+`utils/pagos.js` replica las etapas en SQL para saldos, alertas y resumen. Las boletas conservan el total bruto y desglosan neto/IVA en pesos. Las NC nuevas y los pagos nuevos exigen pesos enteros; los abonos históricos no se reescriben. Como los documentos reconstruyen sus importes, los comprobantes existentes también reflejan la regla actual al consultarse.
+
+`node src/scripts/crearVistasResumen.js --actualizar-importes` recompone únicamente las vistas materializadas de documentos y movimientos y refresca el conjunto en una transacción. No ejecuta `DROP SCHEMA` ni modifica documentos, abonos, stock o tablas de negocio. `tests/redondeoClp-postgres.cjs` verifica coincidencia entre SQL y JavaScript con tablas TEMP y casos de cantidades/porcentajes fraccionarios.
+
+## Facturas de clientes desde obras
+
+`modules/facturas-cliente/routes.js` publica `/api/facturas-cliente` para Administrador General y Administración. El supervisor finaliza la obra, pero no registra su factura. `service.js` lista obras finalizadas sin factura, previsualiza, confirma una factura por obra, reconstruye el comprobante y registra notas de crédito globales de monto. El PDF usa `modules/exportaciones/service.js` y Puppeteer existentes.
+
+Se reutiliza `documento_tributario`: cliente, obra, folio, emisión, vencimiento, descuento general e IVA 19 %. No se insertan líneas en `detalle_documento` ni se añaden tablas/columnas. Los servicios se obtienen del detalle del presupuesto aprobado; los materiales son todos los EGRESO de la obra menos sus REVERSA, con `precio_lista_vigente` dividido por 1,19. Los totales usan enteros escalados, redondeo por línea y descuento general antes del IVA. Un presupuesto antiguo sin detalle debe revisarse antes de facturar.
+
+La confirmación bloquea presupuesto, obra, cliente y artículos relacionados, serializa el folio y conserva el UUID de reintento en auditoría. La factura se reconstruye desde los orígenes protegidos: `utils/bloqueoFacturacion.js` impide cambios a obra/movimientos facturados; los presupuestos aprobados ya son inmutables. Los servicios de clientes/artículos protegen RUT, razón social, nombre y unidad que aparecen en comprobantes. Los precios actuales del catálogo, stock y otros campos operativos no se congelan. La reversa toma el bloqueo de la obra antes del artículo, igual que la factura.
+
+`POST /:id/notas-credito` exige folio, fecha, motivo y rebaja neta en pesos enteros. Guarda otra fila con `id_documento_referencia`, `monto_neto_correccion` e IVA 19 %, sin cambiar factura original ni stock. Bloquea la factura, controla rebajas acumuladas y saldo tras abonos y reconoce reintentos. GET `/:id` devuelve totales, notas aplicadas y saldo por cobrar. Los abonos de clientes se registran con pagos-documento; su integración en los indicadores del resumen sigue pendiente.
+
+Es un registro interno: no integra emisión tributaria SII. Comprobaciones: `node --test tests/facturasCliente.test.js`; `node tests/facturasCliente-postgres.cjs` usa exclusivamente tablas TEMP para factura, NC, reintentos y bloqueos. No ejecutar `schema.sql` para habilitar este módulo.
+
 ## Archivos y carpetas principales
 
 | Lugar | Para qué sirve |
@@ -25,13 +51,74 @@ El backend recibe las peticiones del frontend, comprueba permisos y trabaja con 
 | `middlewares/auth.js` | Verifica el JWT y el estado del usuario; también comprueba los roles permitidos. |
 | `modules/` | Agrupa las funcionalidades del sistema en carpetas. |
 | `utils/` | Funciones y herramientas compartidas por varios módulos. |
+| `utils/formatoImportes.js` | Formato de presentación CLP en pesos enteros para PDF. Excel aplica formato visual sin decimales a sus celdas monetarias numéricas, conservando el valor exportado. |
+| `utils/firmas.js` | Valida firmas vectoriales de Gamma comprimidas como texto gzip/Base64, con límites de tamaño y puntos; conserva compatibilidad con PNG anteriores. |
 | `utils/contactos.js` | Valida y normaliza nombre, RUT, cargo, correo y teléfono de contactos de clientes y ejecutivos de proveedores. Las reglas de listas, identificadores y pertenencia permanecen en cada servicio. |
 | `utils/decimales.js` | Convierte decimales no negativos ya validados a enteros con BigInt. Documentos de proveedor y recepciones comparten esta conversión; sus fórmulas y redondeos permanecen en cada servicio. |
 | `utils/validaciones.js` | Reglas para validar y normalizar RUT, nombres, correo y contraseña. |
 | `utils/ErrorHttp.js` | Permite que un servicio lance un error con estado y mensaje; `app.js` lo convierte en respuesta. |
 | `scripts/crearAdmin.js` | Se ejecuta manualmente para crear el administrador inicial. |
+| `scripts/crearDatosPrueba.js` | Carga manualmente 3 clientes, 2 proveedores, 6 artículos, 3 presupuestos y una obra ficticios. Requiere seed actualizado, administrador activo y `tecnico@fyag.cl` creado con `crearUsuariosPrueba.js`. Reutiliza servicios y auditoría; los ingresos iniciales pasan por Cardex con claves de reintento estables. |
+
+Desde `backend`, ejecutar `node src/scripts/crearDatosPrueba.js` para cargar ejemplos. Si el administrador tiene otro correo, enviarlo como argumento: `node src/scripts/crearDatosPrueba.js correo@example.com`. Usa la base indicada en `.env`; está pensado para desarrollo y no se ejecuta al iniciar el servidor. No crea usuarios ni documentos tributarios.
+
+Los ejemplos se reconocen por `[PRUEBA]`, RUT fijos y códigos `DEMO-ART-...`. Una nueva ejecución conserva las fichas, presupuestos y estados existentes; no repite los ingresos iniciales ni restaura material ya consumido. Cada operación se confirma por separado con su auditoría: si la carga falla, los pasos anteriores quedan guardados y se puede reintentar. No borra datos ni recrea tablas.
 
 ## Módulos actuales
+
+### Gamma: terreno
+
+`src/modules/gamma/routes.js` restringe descarga y sincronización al técnico autenticado. `service.js` consulta sus obras y entregas, recibe firmas, registra hojas/checklists/consumos y presupuestos preliminares. Reutiliza Cardex y auditoría, sin nuevas tablas. El detalle de datos, bloqueos e idempotencia está en [GAMMA.md](GAMMA.md). `tests/gamma.test.js` usa SQL simulado, sin escribir en PostgreSQL.
+
+### Exportaciones
+
+`src/modules/exportaciones/service.js` genera HTML/CSS de informes, PDF con Puppeteer y Excel con SheetJS. Reutiliza los servicios de consulta, sin modificar cálculos ni guardar archivos en la base. Las rutas permanecen en sus módulos originales:
+
+| Ruta | Contenido |
+|---|---|
+| `GET /api/documentos-proveedor/:proveedor/:id/pdf` | Comprobante interno con proveedor, fechas, materiales, descuentos, IVA, total, pagos y saldo. Valida la pertenencia al proveedor. |
+| `GET /api/resumen/exportar/pdf?mes=AAAA-MM` | Resumen completo del mes con indicadores, gráficos y tablas; saldos y stock actuales. |
+| `GET /api/resumen/exportar/xlsx?mes=AAAA-MM` | Libro Excel con hojas Informe, Indicadores, Compras, Presupuestos, Obras, Movimientos, Stock critico, Vencimientos y Materiales. |
+
+Acceden Administrador General y Administración. Las respuestas son adjuntos binarios con `Cache-Control: no-store`. El resumen usa `obtener(filtros, true)`: exporta todas las filas de materiales, stock crítico y próximos vencimientos, no solo las páginas o diez ejemplos visibles. Un informe de más de 10.000 filas devuelve 413, sin truncarlo silenciosamente. Se reutiliza el filtro de mes; cliente/técnico/estado siguen pendientes.
+
+El PDF se renderiza con JavaScript desactivado, solicitudes de red abortadas y textos escapados. El navegador se cierra al terminar, incluso ante errores; se admiten hasta dos PDF concurrentes. Excel usa `json_to_sheet`, columnas dimensionadas y autofiltros; textos de usuarios se mantienen como texto, sin convertirlos en fórmulas. Los importes con más de quince dígitos significativos se conservan como texto para no perder precisión.
+
+Dependencias: Puppeteer y SheetJS CE 0.20.3 desde el CDN oficial de SheetJS, declaradas en `package.json` y su lock. Ejecutar `npm install` desde backend. `.puppeteerrc.cjs` configura la descarga de Chrome en `node_modules/.cache/puppeteer`, excluido por node_modules. En infraestructura Linux se deben cubrir los requisitos del navegador de Puppeteer antes del despliegue; no se desactiva su sandbox en el código.
+
+Verificación de desarrollo: Excel real escrito y leído con SheetJS, PDF real generado con Chrome y datos ficticios, revisión de captura del comprobante y prueba de fechas DATE nativas de pg. Las pruebas automáticas no requieren acceder a la base instalada.
+
+### Resumen de gestión
+
+`src/modules/resumen/routes.js` expone `GET /api/resumen?mes=AAAA-MM&pagina=1`, autorizado para Administrador General y Administración. `service.js` obtiene en una sola consulta de lectura las tarjetas, series de seis meses, estados y tablas. El mes predeterminado se determina con la fecha de Chile; la paginación de materiales usa 20 filas. Devuelve `actualizado_en`, `mes`, `indicadores`, `compras_por_mes`, `presupuestos`, `movimientos`, `obras`, `stock_critico`, `vencimientos` y `materiales`.
+
+- Compras: costo neto de INGRESO vinculado mediante detalle a un documento de proveedor. Las reversas descuentan en el mes de su registro; los ingresos libres quedan fuera. Las devoluciones se muestran por su propio tipo, sin tratarlas automáticamente como notas de crédito.
+- Presupuestos: emitidos durante el mes elegido, clasificados por su estado actual. No representan aprobaciones ocurridas necesariamente en ese mes porque no existe una fecha de aprobación.
+- Servicios realizados: obras Finalizada cuya fecha_cierre pertenece al mes. El flujo de cierre aún requiere completar horas y costos.
+- Utilización: cantidades netas por artículo, unidad y tipo original. Las reversas corrigen su tipo original; los ajustes conservan signo. El gráfico cuenta los registros originales y las reversas por separado. No se suman cantidades de unidades diferentes.
+- Cuentas por pagar: saldo positivo actual de facturas/boletas de proveedor, descontando pago_documento. Comparte el cálculo de importes de `utils/pagos.js`. Las notas de crédito todavía no se aplican.
+- Stock, vencimientos y obras en proceso: situación actual, independiente del mes seleccionado. Stock y próximos vencimientos muestran hasta 10 ejemplos; las tarjetas conservan la cantidad total.
+- Ventas y cuentas por cobrar: `null`, pendientes de documentos/cobros de clientes; no se presentan como cero ni se sustituyen por presupuestos.
+
+No se crean tablas, vistas materializadas ni cachés para el resumen; PostgreSQL agrega los datos al consultar. No hay actualización periódica automática: Consultar/Actualizar vuelve a pedir la información. Las exportaciones PDF/Excel y los filtros por cliente/técnico/estado del informe quedan para una entrega posterior. Los importes y cantidades se devuelven como texto decimal para conservar precisión.
+
+### Pagos de documentos
+
+`src/modules/pagos-documento/routes.js` expone `GET /api/pagos-documento/:id` (documento, saldo e historial paginado) y `POST /api/pagos-documento/:id` (monto, fecha_pago y observaciones opcionales). Acceden Administrador General y Administración. `service.js` valida el abono, bloquea el documento antes de volver a leer el saldo y guarda pago y auditoría juntos. Por ahora admite facturas y boletas de proveedores; el modelo permite asociar futuros cobros a documentos de clientes, pero su API todavía no está implementada.
+
+`utils/pagos.js` calcula importes con BigInt y comparte la expresión SQL del total usada por alertas. La tabla `pago_documento` guarda cada abono; `documento_tributario.estado_pago` se elimina del schema. La API conserva el nombre `estado_pago` como resultado calculado: Pendiente, Parcialmente pagada o Pagada. Guías y notas de crédito devuelven No aplica. El saldo actual descuenta pagos; la aplicación financiera de notas de crédito sigue pendiente.
+
+No hay edición ni eliminación de pagos en esta entrega. Los documentos con abonos no pueden editarse. No hay reintentos automáticos de pagos: ante pérdida de respuesta, consultar el historial antes de registrarlo de nuevo. Actualizar la base instalada requiere incorporar este cambio de schema antes de usar el código; el desarrollo no ejecuta `schema.sql`, que borra datos.
+
+### Primera entrega de Beta
+
+| Carpeta | Responsabilidad |
+|---|---|
+| `src/modules/categorias-servicio/` | Listar, crear y editar los tipos de servicio existentes en el schema. |
+| `src/modules/presupuestos/` | Presupuestos de monto manual, selector limitado de clientes, edición de Pendiente y aprobación/rechazo. |
+| `src/modules/obras/` | Obras desde presupuestos aprobados, técnico activo, estados iniciales y consulta de egresos netos de reversas. |
+
+Cada carpeta conserva `routes.js` para URLs/permisos y `service.js` para validaciones, consultas y auditoría transaccional. Acceden Supervisor de Obras y Administrador General. El cierre sigue bloqueado hasta disponer de horas y respaldo de costos. El contrato para el frontend está en [BETA.md](BETA.md).
 
 | Carpeta en `modules/` | Qué contiene |
 |---|---|
@@ -267,11 +354,11 @@ Se retiró `obra.id_cliente`: el cliente se consulta mediante `obra.id_presupues
 
 Revisión del resto del esquema:
 
-- `documento_tributario.id_cliente` solo se deduce de una obra cuando `id_obra` está informado. Se conserva porque el documento puede existir sin obra. Cuando se implemente la facturación de clientes, validar que ambos clientes coincidan si se vincula una obra.
+- Los documentos de clientes obtienen su cliente mediante `documento_tributario.id_obra → obra.id_presupuesto → presupuesto.id_cliente`; no guardan `id_cliente`. El modelo del MVP exige exactamente uno entre obra (documentos de clientes) y proveedor. La API de facturación y pagos sigue devolviendo el cliente calculado para las pantallas.
 - `movimiento_cardex.id_articulo` también puede obtenerse de un detalle de compra, pero este detalle es opcional y los movimientos libres lo necesitan. `cantidad` representa la cantidad realmente movida y puede diferir de la comprada por recepciones parciales. Se conservan ambos.
 - `detalle_documento.precio_lista` y `movimiento_cardex.precio_lista_vigente` son copias históricas, no sustitutos del precio actual del artículo.
 - `hoja_de_servicio.id_usuario`, `obra.id_tecnico`, `movimiento_cardex.id_usuario` y `recepcion_material.id_usuario_receptor` identifican responsabilidades distintas; no se deducen necesariamente unos de otros.
-- `plantilla_checklist.id_categoria_servicio` clasifica una plantilla, mientras `obra.id_categoria_servicio` clasifica una obra. Son relaciones de entidades distintas.
+- `item_checklist.id_tarea` define comprobaciones predeterminadas de una tarea. `respuesta_checklist` conserva la copia de cada hoja y su resultado; no depende de cambios posteriores del catalogo.
 - `ciudad` no se deriva necesariamente del nombre de comuna: el catálogo actual contiene regiones y comunas, no ciudades. No se elimina.
 
 No se eliminaron otros campos durante esta revisión. La aprobación de presupuestos, la coherencia de documentos de cliente con obra y la integración Gamma siguen pendientes de sus respectivos servicios.
@@ -338,3 +425,58 @@ Verificación: pruebas simuladas de los roles permitidos y rechazados en los tre
 `listar(tipo, rol, filtros)` devuelve `{registros,total,pagina,limite}` con páginas de cinco filas y paginación validada. Un CTE por consulta obtiene total y página en la misma lectura, incluyendo el total cero. No se expone PMP ni costos. Stock usa activos y disponibilidad <= mínimo. Facturas requieren proveedor, tipo factura y pago Pendiente; se separan vencidas (<hoy) y próximas (hoy..hoy+7), con hoy calculado por PostgreSQL en America/Santiago. Tipos y ordenación se eligen mediante opciones cerradas; límite y desplazamiento son parametrizados. No hay escrituras ni cambios de esquema.
 
 `tests/alertas.test.js` comprueba autorización, validaciones, paginación y filtros. Pruebas adicionales en tablas temporales verificaron stock asignado, igualdad al mínimo, inactivos, límites hoy/día7/día8, exclusión de pagadas, documentos de cliente y guías, y páginas posteriores. La administración de pagos continúa pendiente; el filtro usa `estado_pago` existente.
+
+## Utilidades compartidas de documentos
+
+`src/utils/importesDocumento.js` calcula los importes con descuentos sucesivos y redondeos exactos. Documentos de proveedor y pagos reutilizan este cálculo. `src/utils/decimales.js` convierte entre decimales validados y enteros escalados; `src/utils/validaciones.js` comparte las comprobaciones de fechas y UUID v4.
+
+El resumen comprueba en SQL el límite combinado de 10.000 filas de materiales, stock crítico y vencimientos antes de construir el JSON de exportación. Si se excede, responde 413 sin generar el archivo. Las exportaciones admitidas conservan todas sus filas y la consulta mantiene una sola instantánea.
+
+## Resumen materializado
+
+`src/modules/resumen/service.js` consulta seis vistas definidas en `db/schema.sql`: `mv_resumen_movimientos` (mes, artículo, tipo original/efectivo, cantidades y compras), `mv_resumen_documentos` (saldos con descuentos, IVA y abonos), `mv_resumen_stock` (disponibilidad crítica), `mv_resumen_presupuestos` (mes y estado), `mv_resumen_obras` (estado y mes de cierre) y `mv_resumen_control` (fecha del conjunto, incluso vacío).
+
+`GET /api/resumen` y las exportaciones leen esas vistas sin refrescarlas. El filtro de vencimientos usa el día de la instantánea guardada; no mezcla saldos antiguos con un día nuevo. Se mantiene el límite de 10.000 filas antes de construir el JSON de exportación.
+
+`POST /api/resumen/actualizar` exige los mismos roles que la consulta. Un bloqueo de sesión PostgreSQL evita refrescos simultáneos entre instancias; se toma antes de la transacción `REPEATABLE READ` para comprobar el plazo con una instantánea posterior al refresco anterior. El backend comprueba cinco minutos con el reloj de PostgreSQL. Cada vista tiene un índice único para `REFRESH MATERIALIZED VIEW CONCURRENTLY`: todas se publican con un único commit, con tiempo máximo de 60 segundos por sentencia. El fallo revierte el conjunto. La conexión se libera siempre y se descarta si falla la liberación del bloqueo. No es una modificación de datos de negocio y no crea auditorías de movimientos o pagos.
+
+`src/scripts/crearVistasResumen.js` extrae exclusivamente el bloque delimitado `BEGIN VISTAS RESUMEN` / `END VISTAS RESUMEN` del schema e instala vistas e índices en una transacción, con el mismo bloqueo global del refresco. No ejecuta su `DROP SCHEMA`. Es una instalación idempotente, no una migración de definiciones existentes. Si encuentra una instalación parcial o vistas sin poblar, refresca las seis en esa transacción antes de confirmar. Si el conjunto completo ya está poblado, lo conserva. Las consultas devuelven 503 con una indicación de instalación si faltan vistas; no vuelven silenciosamente al cálculo completo.
+
+## Cierre de obras y egresos en estados terminales
+
+`modules/obras/service.js` permite `En proceso → Finalizada` mediante `cambiarEstado`. `comprobarCierre` utiliza las hojas de servicio y los materiales utilizados ya registrados: técnico asignado, horas positivas, consumos vinculados a egresos de la misma obra y cantidades/costos válidos. Se descuentan las reversas y se rechazan respaldos inconsistentes o NaN. Un costo cero sigue siendo válido; no se inventan tarifas ni valoración monetaria de horas. Si la obra declara `sin_materiales`, no puede tener egresos netos positivos. Se guarda `fecha_cierre` del servidor con estado y auditoría en una transacción.
+
+El control solo conoce lo persistido. Gamma aún no registra hojas ni consumos por API, por lo que no existe un flujo completo de captura y cierre desde terreno. No se puede detectar material todavía sin sincronizar. En una obra con materiales se exige consumo respaldado; las entregas de Bodega por sí solas no acreditan uso en terreno. El bloqueo de cancelación por facturas/pagos sigue pendiente.
+
+`modules/movimientos/service.js` toma `FOR SHARE` sobre la obra y rechaza nuevos EGRESO cuando está Cancelada o Finalizada, antes de guardar stock, movimiento o auditoría. El cierre/cancelación toma `FOR UPDATE`, de modo que el egreso espera y comprueba el estado confirmado. Las reversas y mermas conservan sus reglas actuales. La futura sincronización de Gamma deberá comprobar y bloquear la obra dentro de su transacción antes de guardar hojas, consumo y egreso; no basta con invocar el cálculo puro de saldos.
+
+
+### Facturas asociadas a guias y boletas con precio bruto
+
+`documentos-proveedor/service.js` registra facturas directas o con `guias: [id_documento, ...]`. `GET /api/documentos-proveedor/:proveedor/guias-disponibles` ofrece guias sin factura, con busqueda y paginacion. La seleccion definitiva se valida bajo bloqueo; los vinculos de `factura_guia` son permanentes y los datos monetarios de esas guias quedan protegidos. La factura agrupada no admite recepcion propia.
+
+Las boletas reciben `detalles[].costo_bruto` en pesos enteros. `utils/importesDocumento.js` convierte al costo neto con cuatro decimales para inventario, recupera el bruto para descuentos y desglosa IVA incluido. Su pago completo y ambas auditorias se guardan en la misma transaccion. Factura, boleta y guia utilizan IVA fijo del 19 % en nuevas escrituras; las notas de credito aplican una rebaja global al saldo, sin movimientos fisicos.
+
+`utils/pagos.js` comparte la consulta de guias originales y el calculo SQL de saldos para coincidir con los totales JavaScript, incluyendo los redondeos originales de cada guia. La vista materializada `mv_resumen_documentos` usa el mismo criterio. La base instalada requiere adaptar la tabla y la vista; no se ejecuto el schema ni una migracion.
+
+
+### Nota de credito: correccion global de monto
+
+La NC registra folio, emision, motivo obligatorio, factura original y `monto_neto_correccion`. No tiene vencimiento ni lineas de materiales. La columna NUMERIC(14,2) es obligatoria y positiva solo para NC mediante `chk_monto_nota_credito`; en otros documentos permanece NULL. IVA 19 % y total se calculan, sin columnas derivadas.
+
+El selector de referencias ofrece facturas del mismo proveedor con saldo positivo, por folio, fecha y saldo. El servidor bloquea la factura antes de validar y registrar: `saldo = total factura - pagos - total notas de credito`. La rebaja con IVA no puede superar ese saldo. Documento y auditoria se guardan en la misma transaccion; no se escribe en Cardex. Una NC registrada no admite edicion. Las facturas con NC conservan sus importes y detalles; solo permiten cambios de metadata si no existen otros bloqueos.
+
+Los pagos posteriores, listados y alertas usan el saldo reducido. El resumen conserva su actualizacion manual mediante vista materializada. Comprobante y PDF de NC muestran neto, IVA, total y folio de factura sin tabla de materiales. Devoluciones fisicas, anulaciones y saldos a favor de facturas ya pagadas quedan fuera de este alcance.
+
+
+### Tareas y presupuestos detallados
+
+- `src/modules/tareas-servicio/routes.js`: CRUD sin borrado, protegido para Administrador General y Supervisor; URL `/api/tareas-servicio`.
+- `src/modules/tareas-servicio/service.js`: lista, filtra, crea, edita e inactiva tareas por categoria con precio neto sugerido entero; auditoria atomica.
+- `src/modules/presupuestos/service.js`: nuevos presupuestos con categoria y lineas, conserva descripciones/precios acordados y bloquea edicion tras aprobar/rechazar. Mantiene compatibilidad con montos manuales anteriores y de Gamma.
+- `src/utils/importesPresupuesto.js`: calculo con BigInt, redondeo por linea a pesos y luego IVA19; controla el limite de `presupuesto.monto_total`.
+- `src/modules/obras/service.js`: exige que la categoria coincida con la del presupuesto detallado aprobado; las obras de presupuestos manuales mantienen seleccion de categoria.
+
+Schema: `tarea_servicio`, `detalle_presupuesto` y `presupuesto.id_categoria_servicio` (nullable para historicos). No modifica checklists ni agrega tipos de movimiento. El contrato completo se encuentra en `BETA.md`.
+
+Checklist por tarea: `modules/tareas-servicio/service.js` consulta y mantiene item_checklist con la tarea y su auditoria en una misma transaccion. `modules/gamma/service.js` valida la tarea contratada, crea o continua la hoja unica, conserva copias de comprobaciones y calcula egresos incrementales. `modules/obras/service.js` deriva la obra desde detalle_presupuesto al comprobar las hojas y bloquea el cierre si alguna tarea no esta Completada. El catalogo predeterminado de ejemplo se encuentra en el bloque ITEMS CHECKLIST de db/seed.sql. Se retiro plantilla_checklist del modelo.

@@ -1,5 +1,6 @@
+import { pesos, evitarCambioConRueda } from '../../utils/importes';
 import { useState } from 'react';
-import useListado from '../../hooks/useListado';
+import SelectorPaginado from '../../components/SelectorPaginado';
 import { api } from '../../api/cliente';
 import { useAuth } from '../../context/AuthContext';
 import { cantidadVisible, nombresMovimiento as nombres } from '../../utils/movimientos';
@@ -47,21 +48,21 @@ export default function FormularioMovimiento({tipo,unidad,idArticulo,onConfirmad
         {pendiente&&<p role="status">Hay una confirmación pendiente de respuesta. Reinténtala antes de registrar otra.</p>}
         <fieldset disabled={guardando||Boolean(pendiente)} className="alpha-campos">
             {tipo==='MERMA'&&<label><span><input type="checkbox" checked={asociarObra} onChange={e=>{setAsociarObra(e.target.checked);setObra(null);}} /> Asociar a una obra (opcional)</span></label>}
-            {(tipo==='EGRESO'||(tipo==='MERMA'&&asociarObra))&&<SelectorDatos url="/api/articulos/obras" campoId="id_obra" etiqueta="Obra asociada" valor={obra} seleccionar={setObra}
-                texto={o=>`${o.nombre_obra} — ${o.cliente}`} />}
-            {necesitaReceptor&&<SelectorDatos url="/api/movimientos/receptores?tecnico=true" campoId="id_usuario" etiqueta="Técnico responsable"
-                valor={receptor} seleccionar={setReceptor} texto={u=>`${u.nombres} ${u.apellidos}`} />}
-            {necesitaOrigen&&<SelectorDatos key={tipo} url={`/api/movimientos/${idArticulo}/referencias?tipo=${tipo}`} campoId="id_movimiento"
-                etiqueta={tipo==='REVERSA'?'Movimiento a corregir':'Ingreso original del proveedor'} valor={original}
-                seleccionar={m=>{setOriginal(m);setCantidad(tipo==='REVERSA'&&m?cantidadVisible(m.cantidad_disponible):'');}}
-                texto={m=>`${nombres[m.tipo_movimiento]} #${m.id_movimiento} — ${cantidadVisible(m.cantidad_disponible)} ${unidad} disponibles${m.receptor_nombres?` — ${m.receptor_nombres} ${m.receptor_apellidos}`:''}${m.proveedor?` — ${m.proveedor} · ${m.documento_folio}`:''}`} />}
-            {original&&<p>Original: {cantidadVisible(original.cantidad)} {unidad}. Costo unitario: {original.costo_unitario} CLP. Disponible para esta operación: {cantidadVisible(original.cantidad_disponible)} {unidad}.</p>}
+            {(tipo==='EGRESO'||(tipo==='MERMA'&&asociarObra))&&<SelectorPaginado ruta="/api/articulos/obras" campoId="id_obra" etiqueta="Obra asociada" valor={obra?.id_obra ?? ''} opcionActual={obra} alCambiar={(_id, registro) => setObra(registro)}
+                nombre={o=>`${o.nombre_obra} — ${o.cliente}`} />}
+            {necesitaReceptor&&<SelectorPaginado ruta="/api/movimientos/receptores?tecnico=true" campoId="id_usuario" etiqueta="Técnico responsable"
+                valor={receptor?.id_usuario ?? ''} opcionActual={receptor} alCambiar={(_id, registro) => setReceptor(registro)} nombre={u=>`${u.nombres} ${u.apellidos}`} />}
+            {necesitaOrigen&&<SelectorPaginado key={tipo} ruta={`/api/movimientos/${idArticulo}/referencias?tipo=${tipo}`} campoId="id_movimiento"
+                etiqueta={tipo==='REVERSA'?'Movimiento a corregir':'Ingreso original del proveedor'} valor={original?.id_movimiento ?? ''} opcionActual={original}
+                alCambiar={(_id,m)=>{setOriginal(m);setCantidad(tipo==='REVERSA'&&m?cantidadVisible(m.cantidad_disponible):'');}}
+                nombre={m=>`${nombres[m.tipo_movimiento]} #${m.id_movimiento} — ${cantidadVisible(m.cantidad_disponible)} ${unidad} disponibles${m.receptor_nombres?` — ${m.receptor_nombres} ${m.receptor_apellidos}`:''}${m.proveedor?` — ${m.proveedor} · ${m.documento_folio}`:''}`} />}
+            {original&&<p>Original: {cantidadVisible(original.cantidad)} {unidad}. Costo unitario: {pesos(original.costo_unitario)} CLP. Disponible para esta operación: {cantidadVisible(original.cantidad_disponible)} {unidad}.</p>}
             <label>{tipo==='REVERSA'?'Cantidad a revertir':tipo==='AJUSTE'?'Diferencia (positiva o negativa)':'Cantidad'} ({unidad}) *
                 <input type="number" min={tipo==='AJUSTE'?(unidad==='UN'?'-999999999':'-999999999.999'):(unidad==='UN'?'1':'0.001')}
                     max={maximo} step={unidad==='UN'?'1':'0.001'} required value={cantidad} onChange={e=>setCantidad(e.target.value)} />
                 {errores.cantidad&&<small>{errores.cantidad}</small>}
             </label>
-            {tipo==='INGRESO'&&<label>Costo neto unitario (sin IVA) *<input type="number" min="0" max="9999999999.9999" step="0.0001" required value={costo} onChange={e=>setCosto(e.target.value)} /></label>}
+            {tipo==='INGRESO'&&<label>Costo neto unitario (sin IVA) *<input type="number" min="0" max="9999999999" step="1" inputMode="numeric" onWheel={evitarCambioConRueda} required value={costo} onChange={e=>setCosto(e.target.value)} /></label>}
             {tipo==='REVERSA'&&<p>Indica una cantidad positiva. El sistema aplica el efecto contrario al movimiento original; no edita ni elimina ese registro.</p>}
             {tipo==='USO_INTERNO'&&<p>Se asigna material al técnico: aumenta el stock comprometido sin disminuir el total.</p>}
             <label>Justificación *<textarea maxLength={2000} required value={justificacion} onChange={e=>setJustificacion(e.target.value)} /></label>
@@ -71,20 +72,4 @@ export default function FormularioMovimiento({tipo,unidad,idArticulo,onConfirmad
             {guardando?'Registrando…':pendiente?'Reintentar confirmación':'Registrar movimiento'}
         </button>
     </form>;
-}
-function SelectorDatos({url,campoId,etiqueta,valor,seleccionar,texto}) {
-    const { q, buscar, pagina, setPagina, datos, error, cargando, recargar } = useListado(url);
-    const lista=datos?.registros || [];
-    const opciones=valor&&!lista.some(d=>d[campoId]===valor[campoId])?[valor,...lista]:lista;
-    return <div>
-        <label>Buscar {etiqueta.toLowerCase()}<input type="search" maxLength={150} value={q} onChange={e=>{buscar(e.target.value);}} /></label>
-        <label>{etiqueta} *<select value={valor?.[campoId]||''} required disabled={cargando||Boolean(error)} onChange={e=>seleccionar(opciones.find(d=>String(d[campoId])===e.target.value)||null)}>
-            <option value="">Selecciona una opción</option>{opciones.map(d=><option key={d[campoId]} value={d[campoId]}>{texto(d)}</option>)}
-        </select></label>
-        {cargando?<p role="status">Cargando…</p>:error?<p role="alert">{error.message}<button type="button" onClick={recargar}>Reintentar</button></p>:<>
-            {!lista.length&&<p>No hay opciones disponibles.</p>}
-            <nav aria-label={`Páginas de ${etiqueta.toLowerCase()}`}><button type="button" disabled={pagina<=1} onClick={()=>setPagina(p=>p-1)}>Anterior</button>
-                <span>Página {pagina}</span><button type="button" disabled={pagina*datos.limite>=datos.total} onClick={()=>setPagina(p=>p+1)}>Siguiente</button></nav>
-        </>}
-    </div>;
 }

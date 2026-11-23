@@ -3,3 +3,7 @@ ARQUITECTURA.md
 /AGENTS.md
 /.agents/
 /docs/
+FastCommand.md
+LIBRERIAS_Y_COMPATIBILIDAD.txt
+/backend/src/scripts/crearVistasResumen.js
+/backend/src/scripts/crearDatosPrueba.js

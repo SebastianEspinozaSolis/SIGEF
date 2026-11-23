@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../../api/cliente';
 import { useAuth } from '../../context/AuthContext';
@@ -7,6 +7,34 @@ import './alpha.css';
 
 // Las tres fichas comparten formulario y listado, pero conservan sus campos propios.
 import { fichas, camposEjecutivo, areasCliente, camposBanco } from './configuracionFichas';
+
+const tiposCuenta = ['Cuenta Corriente', 'Cuenta Vista', 'Cuenta Ahorro'];
+
+function CampoTipoCuenta({ valor, cambiar, maximo, error, descripcionError }) {
+    const id = useId();
+    const [otro, setOtro] = useState(() => Boolean(valor && !tiposCuenta.includes(valor)));
+    return <div>
+        <label htmlFor={id}>Tipo de cuenta *</label>
+        <select id={id} required value={otro ? '__otro' : valor}
+            aria-invalid={Boolean(error)} aria-describedby={error ? descripcionError : undefined}
+            onChange={evento => {
+                const personalizado = evento.target.value === '__otro';
+                setOtro(personalizado);
+                // La opción Otro solo controla la interfaz; el formulario guarda el texto escrito.
+                cambiar(personalizado ? '' : evento.target.value);
+            }}>
+            <option value="">Selecciona un tipo de cuenta</option>
+            {tiposCuenta.map(tipo => <option key={tipo} value={tipo}>{tipo}</option>)}
+            <option value="__otro">Otro</option>
+        </select>
+        {otro && <label htmlFor={`${id}-otro`}>Especifica el tipo de cuenta *
+            <input id={`${id}-otro`} type="text" value={valor} required maxLength={maximo}
+                aria-invalid={Boolean(error)} aria-describedby={error ? descripcionError : undefined}
+                onChange={evento => cambiar(evento.target.value)} />
+        </label>}
+        {error && <small id={descripcionError}>{error}</small>}
+    </div>;
+}
 
 export default function Fichas({ tipo, registroInicial = null, soloFormulario = false }) {
     const navigate = useNavigate();
@@ -220,23 +248,18 @@ export default function Fichas({ tipo, registroInicial = null, soloFormulario = 
                         <h3>Cuentas bancarias</h3>
                         {!cuentasBancarias.length && <p>Sin cuentas bancarias.</p>}
                         {errores.cuentas_bancarias && <p role="alert">{errores.cuentas_bancarias}</p>}
-                        {/* Son sugerencias; se permite escribir un tipo diferente. */}
-                        <datalist id="sugerencias-tipo-cuenta">
-                            <option value="Cuenta Corriente" />
-                            <option value="Cuenta Vista" />
-                            <option value="Cuenta Ahorro" />
-                        </datalist>
                         {cuentasBancarias.map((cuenta, indice) => <fieldset key={cuenta.clave}>
                             <legend>Cuenta {indice + 1} — {cuenta.activo ? 'Activa' : 'Inactiva'}</legend>
                             <div className="alpha-campos">{camposBanco.map(([campo, etiqueta, maximo]) => {
                                 const claveError = `cuentas_bancarias.${indice}.${campo}`;
+                                if (campo === 'tipo_cuenta') return <CampoTipoCuenta key={campo}
+                                    valor={cuenta[campo]} cambiar={valor => cambiarCuenta(cuenta.clave, campo, valor)}
+                                    maximo={maximo} error={errores[claveError]} descripcionError={`error-${cuenta.clave}-${campo}`} />;
                                 return <label key={campo}>{etiqueta} *
                                     <input type={campo === 'email_pagos' ? 'email' : 'text'} value={cuenta[campo]} required maxLength={maximo}
-                                        list={campo === 'tipo_cuenta' ? 'sugerencias-tipo-cuenta' : undefined}
                                         aria-invalid={Boolean(errores[claveError])}
                                         aria-describedby={errores[claveError] ? `error-${cuenta.clave}-${campo}` : undefined}
                                         onChange={(e) => cambiarCuenta(cuenta.clave, campo, e.target.value)} />
-                                    {campo === 'tipo_cuenta' && <small>Puedes elegir una sugerencia o escribir otro tipo de cuenta.</small>}
                                     {errores[claveError] && <small id={`error-${cuenta.clave}-${campo}`}>{errores[claveError]}</small>}
                                 </label>;
                             })}</div>
@@ -249,7 +272,7 @@ export default function Fichas({ tipo, registroInicial = null, soloFormulario = 
                                 setErrores({});
                             }}>Quitar cuenta nueva</button>}
                         </fieldset>)}
-                        <button type="button" disabled={cuentasBancarias.length >= 50} onClick={agregarCuenta}>Agregar cuenta bancaria</button>
+                        <button type="button" disabled={cuentasBancarias.length >= 5} onClick={agregarCuenta}>Agregar cuenta bancaria</button>
                     </div>}
                     {tipo === 'clientes' && areasCliente.map(([lista, tituloArea]) => <div className="alpha-ejecutivos" key={lista}>
                         <h3>{tituloArea}</h3>
@@ -302,7 +325,7 @@ export default function Fichas({ tipo, registroInicial = null, soloFormulario = 
                                 setEjecutivos((anteriores) => anteriores.filter((e) => e.clave !== ejecutivo.clave)); setErrores({});
                             }}>Quitar ejecutivo</button>
                         </fieldset>)}
-                        <button type="button" disabled={ejecutivos.length >= 50} onClick={agregarEjecutivo}>Agregar ejecutivo comercial</button>
+                        <button type="button" disabled={ejecutivos.length >= 3} onClick={agregarEjecutivo}>Agregar ejecutivo comercial</button>
                     </div>}
                     <div><button type="submit" disabled={tipo !== 'categorias' && (!ubicacionValida || Boolean(errorRegiones) || Boolean(errorComunas))}>{guardando ? 'Guardando…' : 'Guardar'}</button>
                         {soloFormulario ? <button type="button" onClick={volver}>Cancelar</button> : editando !== null && <button type="button" onClick={limpiar}>Cancelar edición</button>}</div>

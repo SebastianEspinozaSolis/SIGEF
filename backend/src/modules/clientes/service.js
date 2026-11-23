@@ -93,6 +93,10 @@ async function guardar(datos, idResponsable, idFicha) {
             const consulta = await client.query(`SELECT id_cliente, ${campos.join(', ')} FROM cliente WHERE id_cliente=$1 FOR UPDATE`, [id]);
             anterior = consulta.rows[0];
             if (!anterior) throw new ErrorHttp(404, 'Registro no encontrado');
+            if(anterior.rut_cliente!==ficha.rut_cliente || anterior.razon_social!==ficha.razon_social) {
+                const facturado=await client.query("SELECT d.id_documento FROM documento_tributario d JOIN obra o USING(id_obra) JOIN presupuesto p ON p.id_presupuesto=o.id_presupuesto WHERE p.id_cliente=$1 AND d.id_proveedor IS NULL AND d.tipo_documento='factura' LIMIT 1",[id]);
+                if(facturado.rows.length)throw new ErrorHttp(409,'El RUT y la razón social respaldan facturas confirmadas y no pueden cambiarse');
+            }
         }
         // Primero comprueba todas las referencias para no modificar contactos de otra empresa o área.
         for (const { lista, tabla } of areas) {

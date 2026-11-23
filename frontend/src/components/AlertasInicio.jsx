@@ -1,3 +1,4 @@
+import { pesos } from '../utils/importes';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/cliente';
@@ -5,8 +6,10 @@ import { ROLES } from '../roles';
 
 const alertas = [
     { tipo: 'stock', titulo: 'Stock en mínimo o bajo', descripcion: 'Disponible en bodega igual o inferior al mínimo.' },
-    { tipo: 'por-vencer', titulo: 'Facturas próximas a vencer', descripcion: 'Pendientes de pago: vencen hoy o en los próximos 7 días.' },
-    { tipo: 'vencidas', titulo: 'Facturas vencidas', descripcion: 'El vencimiento pasó y siguen pendientes de pago.' },
+    { tipo: 'por-vencer', titulo: 'Proveedores: facturas próximas a vencer', descripcion: 'Pendientes de pago: vencen hoy o en los próximos 7 días.' },
+    { tipo: 'vencidas', titulo: 'Proveedores: facturas vencidas', descripcion: 'El vencimiento pasó y siguen pendientes de pago.' },
+    { tipo: 'clientes-por-vencer', titulo: 'Clientes: facturas próximas a vencer', descripcion: 'Pendientes de cobro: vencen hoy o en los próximos 7 días.' },
+    { tipo: 'clientes-vencidas', titulo: 'Clientes: facturas vencidas', descripcion: 'El vencimiento pasó y mantienen saldo por cobrar.' },
 ];
 
 export default function AlertasInicio({ rol }) {
@@ -44,8 +47,10 @@ function TarjetaAlerta({ tipo, titulo, descripcion, rol }) {
                             : <span>{r.codigo_interno} — {r.nombre}</span>}
                         <p>Disponible: {Number(r.stock_disponible)} {r.unidad_medida} · Mínimo: {Number(r.stock_minimo)} {r.unidad_medida}</p>
                     </> : <>
-                        <Link to={`/alpha/proveedores/${r.id_proveedor}/documentos/${r.id_documento}/comprobante`}>Factura {r.folio} — {r.razon_social}</Link>
+                        <Link to={tipo.startsWith('clientes-')?`/beta/facturas-clientes/${r.id_documento}`:`/alpha/proveedores/${r.id_proveedor}/documentos/${r.id_documento}/comprobante`}>Factura {r.folio} — {r.razon_social}</Link>
                         <p>Vencimiento: {String(r.fecha_vencimiento).slice(0, 10).split('-').reverse().join('-')}</p>
+                        <p>Saldo pendiente: {pesos(r.saldo_pendiente)} CLP</p>
+                        {r.dias_restantes!=null && <p>{r.dias_restantes<0?`Vencida hace ${Math.abs(r.dias_restantes)} días`:r.dias_restantes===0?'Vence hoy':`Vence en ${r.dias_restantes} días`}</p>}
                     </>}
                 </li>)}</ul>
                 {resultado.datos.total > resultado.datos.limite && <nav aria-label={`Páginas de ${titulo.toLowerCase()}`}>

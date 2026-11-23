@@ -2,11 +2,12 @@ const pool = require('../../db');
 const { roles } = require('../../config');
 const ErrorHttp = require('../../utils/ErrorHttp');
 const { filtrosListado } = require('../../utils/catalogos');
+const { totalDocumentoSql, totalFacturaClienteSql, totalNotasCreditoSql } = require('../../utils/pagos');
 
 // Listado de alertas de stock y vencimiento de documentos tributarios
 async function listar(tipo, rol, filtros = {}) {
     // lista de alertas validas
-    if (!['stock', 'por-vencer', 'vencidas'].includes(tipo)) throw new ErrorHttp(400, 'Tipo de alerta inválido');
+    if (!['stock', 'por-vencer', 'vencidas', 'clientes-por-vencer', 'clientes-vencidas'].includes(tipo)) throw new ErrorHttp(400, 'Tipo de alerta inválido');
 
     // solo los roles ADMIN y ADMINISTRACION pueden consultar alertas de vencimiento de documentos
     // Bodega se le permite de stock
@@ -17,14 +18,23 @@ async function listar(tipo, rol, filtros = {}) {
     const { pagina, limite, offset } = filtrosListado({ pagina: filtros.pagina, limite: 5 });
     // Se usa la misma regla de mínimo del catálogo; solo participan artículos activos.
     const hoy = `(CURRENT_TIMESTAMP AT TIME ZONE 'America/Santiago')::date`;
+    const cliente=tipo.startsWith('clientes-');
+    const tercero=cliente?'cliente':'proveedor';
+    const totalSql=cliente?totalFacturaClienteSql:totalDocumentoSql;
     const origen = tipo === 'stock'
         ? `SELECT id_articulo,codigo_interno,nombre,unidad_medida,stock_minimo,
             stock_actual-stock_comprometido AS stock_disponible FROM articulo
             WHERE activo=true AND stock_actual-stock_comprometido<=stock_minimo`
-        : `SELECT d.id_documento,d.id_proveedor,d.folio,d.fecha_vencimiento,p.razon_social
-            FROM documento_tributario d JOIN proveedor p USING(id_proveedor)
-            WHERE d.tipo_documento='factura' AND d.estado_pago='Pendiente'
-            AND ${tipo === 'vencidas' ? `d.fecha_vencimiento < ${hoy}`
+        : `SELECT d.id_documento,${cliente ? 'pres.id_cliente' : 'd.id_proveedor'},d.folio,d.fecha_vencimiento,p.razon_social,
+            d.fecha_vencimiento-${hoy} AS dias_restantes,
+            importes.total - COALESCE(abonos.pagado,0) - ${totalNotasCreditoSql} AS saldo_pendiente
+            FROM documento_tributario d ${cliente
+                ? 'JOIN obra o USING(id_obra) JOIN presupuesto pres ON pres.id_presupuesto=o.id_presupuesto JOIN cliente p ON p.id_cliente=pres.id_cliente'
+                : 'JOIN proveedor p USING(id_proveedor)'}
+            CROSS JOIN LATERAL (SELECT ${totalSql} AS total) importes
+            LEFT JOIN LATERAL (SELECT SUM(a.monto) AS pagado FROM pago_documento a WHERE a.id_documento=d.id_documento) abonos ON TRUE
+            WHERE d.tipo_documento='factura' ${cliente ? 'AND d.id_proveedor IS NULL ' : ''}AND importes.total > COALESCE(abonos.pagado,0) + ${totalNotasCreditoSql}
+            AND ${tipo.endsWith('vencidas') ? `d.fecha_vencimiento < ${hoy}`
                 : `d.fecha_vencimiento BETWEEN ${hoy} AND ${hoy}+7`}`;
     const orden = tipo === 'stock' ? 'stock_disponible-stock_minimo,id_articulo' : 'fecha_vencimiento,id_documento';
     // Total y página se obtienen en una misma lectura, incluso si no hay resultados.

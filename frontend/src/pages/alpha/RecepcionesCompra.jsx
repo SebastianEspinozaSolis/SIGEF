@@ -26,7 +26,7 @@ function Listado() {
         <label>Buscar por documento, proveedor o RUT<input type="search" maxLength={150} value={q} onChange={(e)=>{setQ(e.target.value);setPagina(1);}} /></label>
         {resultado?.clave!==clave?<p role="status">Cargando documentos…</p>:resultado.error?<p role="alert">{resultado.error}<button onClick={()=>setVersion(v=>v+1)}>Reintentar</button></p>:<>
             <table><thead><tr><th>Proveedor</th><th>Documento</th><th>Recepción</th><th>Acciones</th></tr></thead>
-                <tbody>{resultado.datos.registros.map(d=><tr key={d.id_documento}>
+                <tbody>{resultado.datos.registros.filter(d=>!d.es_factura_guias).map(d=><tr key={d.id_documento}>
                     <td>{d.razon_social} — {d.rut_proveedor}</td><td>{tiposDocumento.find(([valor])=>valor===d.tipo_documento)?.[1]} {d.folio}</td>
                     <td>{d.tiene_pendientes?'Materiales pendientes':'Completa'}</td><td><Link to={`/alpha/recepciones-compra/${d.id_documento}`}>{d.tiene_pendientes?'Recepcionar':'Consultar'}</Link></td>
                 </tr>)}</tbody></table>
@@ -69,9 +69,10 @@ export function Recepcion({id, idArticulo, idLinea, onConfirmado}) {
         {errorCarga?<ErrorCarga error={errorCarga} noEncontrado="Documento de compra no encontrado."
             volver="/alpha/recepciones-compra" etiqueta="Volver a compras" reintentar={()=>setVersion(v=>v+1)} />:!doc?<p role="status">Cargando…</p>:<>
             <h2>{doc.razon_social} — {doc.rut_proveedor}</h2><p>{tiposDocumento.find(([v])=>v===doc.tipo_documento)?.[1]} {doc.folio}</p>
+            {doc.es_factura_guias && <p>Esta factura agrupa guías. Confirma las recepciones desde cada guía para conservar sus existencias.</p>}
             <p>Marca los materiales que llegaron e indica cuánto recibiste. Solo la confirmación aumenta existencias.</p>
             {ok&&<p role="status">{ok}</p>}{error&&<p role="alert">{error}</p>}
-            <form onSubmit={confirmar}><fieldset disabled={guardando||doc.tipo_documento==='nota_credito'}>
+            <form onSubmit={confirmar}><fieldset disabled={guardando||doc.es_factura_guias||doc.tipo_documento==='nota_credito'}>
                 <div className="alpha-tabla"><table><thead><tr><th>Recibir</th><th>Material</th><th>Unidad</th><th>Comprado</th><th>Recibido</th><th>Pendiente</th><th>Recibir ahora</th></tr></thead>
                     <tbody>{doc.detalles.filter(l=>!idArticulo || (String(l.id_articulo)===String(idArticulo) && String(l.id_detalle_documento)===String(idLinea))).map(l=>{
                         const entrada=entradas[l.id_detalle_documento]||{activo:false,cantidad:''};
@@ -93,7 +94,7 @@ export function Recepcion({id, idArticulo, idLinea, onConfirmado}) {
                     })}</tbody></table></div>
                 <label>Observaciones<textarea maxLength={2000} value={observaciones} onChange={e=>setObservaciones(e.target.value)} /></label>
             </fieldset>
-                <button type="submit" disabled={guardando||!Object.values(entradas).some(c=>c.activo)}>{guardando?'Confirmando…':'Confirmar recepción'}</button>
+                <button type="submit" disabled={guardando||doc.es_factura_guias||!Object.values(entradas).some(c=>c.activo)}>{guardando?'Confirmando…':'Confirmar recepción'}</button>
             </form>
         </>}
     </section>;

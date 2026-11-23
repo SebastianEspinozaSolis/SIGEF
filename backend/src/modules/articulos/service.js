@@ -94,6 +94,14 @@ async function guardar(datos, idResponsable, idArticulo) {
             const r = await client.query('SELECT * FROM articulo WHERE id_articulo = $1 FOR UPDATE', [id]);
             anterior = r.rows[0];
             if (!anterior) throw new ErrorHttp(404, 'Artículo no encontrado');
+            if(['nombre','unidad_medida'].some(c=>anterior[c]!==articulo[c])) {
+                const facturado=await client.query(`SELECT d.id_documento FROM documento_tributario d
+                    JOIN movimiento_cardex m ON m.id_obra=d.id_obra WHERE d.id_proveedor IS NULL AND d.tipo_documento='factura'
+                    AND m.tipo_movimiento='EGRESO' AND m.id_articulo=$1
+                    AND m.cantidad-COALESCE((SELECT SUM(ABS(v.cantidad)) FROM movimiento_cardex v
+                        WHERE v.id_movimiento_revertido=m.id_movimiento AND v.tipo_movimiento='REVERSA'),0)>0 LIMIT 1`,[id]);
+                if(facturado.rows.length)throw new ErrorHttp(409,'El nombre y la unidad respaldan facturas confirmadas y no pueden cambiarse');
+            }
         }
         const valores = [articulo.codigo_interno, articulo.codigo_barras, articulo.nombre,
             articulo.id_categoria, articulo.unidad_medida, articulo.ubicacion_bodega,

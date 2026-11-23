@@ -1,9 +1,12 @@
+const { decimal } = require('../../utils/decimales');
+const { uuidValido } = require('../../utils/validaciones');
 const { isDeepStrictEqual } = require('node:util');
 const pool = require('../../db');
 const ErrorHttp = require('../../utils/ErrorHttp');
 const config = require('../../config');
 const { idPositivo, texto, comprobarErrores, filtrosListado } = require('../../utils/catalogos');
 const { registrarAuditoria } = require('../auditoria/service');
+const { comprobarObraNoFacturada } = require('../../utils/bloqueoFacturacion');
 
 const tiposImplementados = ['INGRESO', 'EGRESO', 'MERMA', 'AJUSTE', 'USO_INTERNO', 'DEVOLUCION_PROVEEDOR', 'REVERSA'];
 function numero(valor, precision, enteros, permiteNegativo = false) {
@@ -14,11 +17,6 @@ function numero(valor, precision, enteros, permiteNegativo = false) {
     const [entero, fraccion=''] = String(valor).replace(/^-/, '').split('.');
     const n = BigInt(entero) * 10n ** BigInt(precision) + BigInt(fraccion.padEnd(precision,'0'));
     return negativo ? -n : n;
-}
-function decimal(n, precision) {
-    const factor = 10n ** BigInt(precision);
-    const absoluto = n < 0n ? -n : n;
-    return `${n < 0n ? '-' : ''}${absoluto / factor}.${String(absoluto % factor).padStart(precision,'0')}`;
 }
 function validar(datos) {
     const errores = {};
@@ -45,7 +43,7 @@ function validar(datos) {
     if (tipo==='REVERSA') {
         try { revertido=idPositivo(datos.id_movimiento_revertido); } catch { errores.id_movimiento_revertido='Selecciona el movimiento original'; }
     } else if (Object.hasOwn(datos,'id_movimiento_revertido')) errores.id_movimiento_revertido='Solo se utiliza para una reversa';
-    if (typeof datos.id_operacion!=='string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(datos.id_operacion)) errores.id_operacion='Identificador de operación inválido';
+    if (!uuidValido(datos.id_operacion)) errores.id_operacion='Identificador de operación inválido';
     for (const campo of ['stock_actual','stock_comprometido','precio_pmp','precio_lista_vigente','id_documento','id_recepcion','id_detalle_documento']) {
         if (Object.hasOwn(datos,campo)) errores[campo]='Este dato lo determina el servidor o corresponde a otro flujo';
     }
@@ -191,14 +189,20 @@ async function registrar(idArticulo, datos, responsable) {
             const documento=await documentoOrigen(client,idOrigen,id);
             if(documento)await client.query('SELECT id_documento FROM documento_tributario WHERE id_documento=$1 FOR UPDATE',[documento]);
         }
+        const obraAfectada=solicitud.tipo_movimiento==='REVERSA'?(origenPrevio?.id_obra || null):solicitud.id_obra;
+        if (obraAfectada!==null) {
+            // Comparte el bloqueo con otros egresos, pero espera un cambio de estado.
+            const obra=await client.query('SELECT id_obra,estado FROM obra WHERE id_obra=$1 FOR SHARE',[obraAfectada]);
+            if (!obra.rows.length) throw new ErrorHttp(400,'La obra indicada no existe');
+            await comprobarObraNoFacturada(client,obraAfectada);
+            if (solicitud.tipo_movimiento==='EGRESO' && ['Cancelada','Finalizada'].includes(obra.rows[0].estado)) {
+                throw new ErrorHttp(409,'No se pueden registrar egresos ni consumos nuevos en una obra cancelada o finalizada');
+            }
+        }
         const r=await client.query('SELECT * FROM articulo WHERE id_articulo=$1 FOR UPDATE',[id]);
         const articulo=r.rows[0];
         if (!articulo) throw new ErrorHttp(404,'Artículo no encontrado');
         if (!articulo.activo) throw new ErrorHttp(409,'No se pueden registrar movimientos de un artículo inactivo');
-        if (solicitud.id_obra!==null) {
-            const obra=await client.query('SELECT id_obra FROM obra WHERE id_obra=$1',[solicitud.id_obra]);
-            if (!obra.rows.length) throw new ErrorHttp(400,'La obra indicada no existe');
-        }
         let original=null, historia=[];
         if(idOrigen) {
             historia=await historialCon(client,id);

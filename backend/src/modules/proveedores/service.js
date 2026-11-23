@@ -31,11 +31,11 @@ function validar(datos) {
     catch { errores.id_comuna = 'Selecciona una comuna del listado'; }
     const mensajeRut = errorRut(ficha.rut_proveedor);
     if (mensajeRut) errores.rut_proveedor = mensajeRut;
-    if (!Array.isArray(datos.cuentas_bancarias) || datos.cuentas_bancarias.length > 50) {
-        errores.cuentas_bancarias = 'Envía una lista de hasta 50 cuentas (puede estar vacía)';
+    if (!Array.isArray(datos.cuentas_bancarias) || datos.cuentas_bancarias.length > 5) {
+        errores.cuentas_bancarias = 'Envía una lista de hasta 5 cuentas (puede estar vacía)';
     }
     const idsCuentas = new Set();
-    const cuentas = (Array.isArray(datos.cuentas_bancarias) ? datos.cuentas_bancarias.slice(0, 50) : []).map((entrada, i) => {
+    const cuentas = (Array.isArray(datos.cuentas_bancarias) ? datos.cuentas_bancarias.slice(0, 5) : []).map((entrada, i) => {
         const dato = entrada && typeof entrada === 'object' && !Array.isArray(entrada) ? entrada : {};
         const prefijo = `cuentas_bancarias.${i}`;
         const cuenta = {
@@ -56,12 +56,12 @@ function validar(datos) {
         return cuenta;
     });
     // La lista explícita evita borrar contactos por omitir el campo durante una edición.
-    if (!Array.isArray(datos.ejecutivos) || datos.ejecutivos.length > 50) {
-        errores.ejecutivos = 'Envía una lista de hasta 50 ejecutivos (puede estar vacía)';
+    if (!Array.isArray(datos.ejecutivos) || datos.ejecutivos.length > 3) {
+        errores.ejecutivos = 'Envía una lista de hasta 3 ejecutivos (puede estar vacía)';
     }
     const vistos = new Set();
     const ids = new Set();
-    const ejecutivos = (Array.isArray(datos.ejecutivos) ? datos.ejecutivos.slice(0, 50) : []).map((datosEjecutivo, indice) => {
+    const ejecutivos = (Array.isArray(datos.ejecutivos) ? datos.ejecutivos.slice(0, 3) : []).map((datosEjecutivo, indice) => {
         const prefijo = `ejecutivos.${indice}`;
         const dato = datosEjecutivo && typeof datosEjecutivo === 'object' && !Array.isArray(datosEjecutivo) ? datosEjecutivo : {};
         const ejecutivo = validarContacto(dato, prefijo, errores);

@@ -351,10 +351,33 @@ CREATE TABLE categoria_servicio (
   nombre_servicio        VARCHAR(80) NOT NULL UNIQUE
 );
 
+COMMENT ON TABLE categoria_servicio IS
+  'Catálogo de categorías que clasifican los servicios ofrecidos por la empresa. Agrupa las tareas del catálogo y permite seleccionar la categoría de un presupuesto; la obra la obtiene desde su presupuesto asociado.';
+COMMENT ON COLUMN categoria_servicio.id_categoria_servicio IS
+  'Identificador de la categoría de servicio. Clave primaria entera, autoincremental y no nula.';
+COMMENT ON COLUMN categoria_servicio.nombre_servicio IS
+  'Nombre de la categoría de servicio, por ejemplo Mantención o Emergencia. Texto de hasta 80 caracteres, obligatorio y único.';
+
+-- Catalogo editable de tareas; los presupuestos conservan sus propias descripciones y precios.
+CREATE TABLE tarea_servicio (
+  id_tarea SERIAL PRIMARY KEY,
+  id_categoria_servicio INT NOT NULL REFERENCES categoria_servicio(id_categoria_servicio),
+  nombre_tarea VARCHAR(150) NOT NULL CHECK (length(trim(nombre_tarea)) > 0),
+  precio_neto NUMERIC(14,0) NOT NULL CHECK (precio_neto >= 0),
+  activo BOOLEAN NOT NULL DEFAULT TRUE
+);
+COMMENT ON TABLE tarea_servicio IS 'Tareas ofrecidas por categoria, con precio neto sugerido en CLP. Se desactivan sin borrar presupuestos anteriores.';
+COMMENT ON COLUMN tarea_servicio.id_tarea IS 'Clave primaria entera autoincremental y no nula.';
+COMMENT ON COLUMN tarea_servicio.id_categoria_servicio IS 'Categoria de servicio obligatoria; FK hacia categoria_servicio(id_categoria_servicio).';
+COMMENT ON COLUMN tarea_servicio.nombre_tarea IS 'Nombre obligatorio de hasta 150 caracteres, sin permitir texto vacio.';
+COMMENT ON COLUMN tarea_servicio.precio_neto IS 'Precio sugerido sin IVA, NUMERIC(14,0) no nulo y no negativo, expresado en pesos enteros.';
+COMMENT ON COLUMN tarea_servicio.activo IS 'Disponibilidad para nuevas selecciones. Booleano obligatorio, verdadero por defecto; desactivar conserva el historial.';
+
 -- El presupuesto puede existir antes de crear su obra.
 CREATE TABLE presupuesto (
   id_presupuesto        SERIAL PRIMARY KEY,
   id_cliente            INT NOT NULL REFERENCES cliente(id_cliente),
+  id_categoria_servicio INT REFERENCES categoria_servicio(id_categoria_servicio),
   fecha_emision         TIMESTAMP NOT NULL DEFAULT now(),
   monto_total           NUMERIC(14,2) NOT NULL DEFAULT 0,
   estado                VARCHAR(30) NOT NULL DEFAULT 'Pendiente'
@@ -364,19 +387,75 @@ CREATE TABLE presupuesto (
   id_operacion_offline  VARCHAR(64) UNIQUE
 );
 
+COMMENT ON TABLE presupuesto IS
+  'Propuesta económica para un cliente, creada desde oficina o terreno. Sus tareas y precios acordados se conservan en detalle_presupuesto; puede existir antes de crear una obra.';
+COMMENT ON COLUMN presupuesto.id_presupuesto IS
+  'Identificador del presupuesto. Clave primaria entera, autoincremental y no nula.';
+COMMENT ON COLUMN presupuesto.id_cliente IS
+  'Cliente al que se presenta el presupuesto. Entero obligatorio y clave foránea hacia cliente(id_cliente).';
+COMMENT ON COLUMN presupuesto.id_categoria_servicio IS
+  'Categoría elegida en el presupuesto detallado. Entero y clave foránea hacia categoria_servicio(id_categoria_servicio). Admite NULL para conservar presupuestos manuales anteriores; el backend exige categoría en los nuevos presupuestos detallados.';
+COMMENT ON COLUMN presupuesto.fecha_emision IS
+  'Fecha y hora de creación del presupuesto. TIMESTAMP sin zona horaria, obligatorio y con valor predeterminado now(), correspondiente al inicio de la transacción si no se proporciona otro valor.';
+COMMENT ON COLUMN presupuesto.monto_total IS
+  'Importe total del presupuesto en CLP, incluido IVA del 19 %. NUMERIC(14,2), obligatorio y predeterminado cero. En presupuestos detallados el backend suma las líneas netas redondeadas al peso y añade el IVA redondeado al peso; conserva el importe ingresado en presupuestos manuales anteriores, sin recalcularlo.';
+COMMENT ON COLUMN presupuesto.estado IS
+  'Estado del presupuesto. Texto de hasta 30 caracteres, obligatorio y predeterminado Pendiente; CHECK admite Pendiente, Aprobado o Rechazado.';
+COMMENT ON COLUMN presupuesto.origen IS
+  'Lugar de creación del presupuesto. Texto de hasta 20 caracteres, obligatorio y predeterminado Oficina; CHECK admite Oficina o Terreno.';
+COMMENT ON COLUMN presupuesto.id_operacion_offline IS
+  'Identificador de la operación de creación desde terreno, utilizado para reconocer reintentos de sincronización y evitar duplicados. Texto de hasta 64 caracteres, único cuando tiene valor; admite NULL para presupuestos que no requieren esta identificación.';
+
+CREATE TABLE detalle_presupuesto (
+  id_detalle_presupuesto SERIAL PRIMARY KEY,
+  id_presupuesto INT NOT NULL REFERENCES presupuesto(id_presupuesto),
+  id_tarea INT NOT NULL REFERENCES tarea_servicio(id_tarea),
+  descripcion VARCHAR(255) NOT NULL CHECK (length(trim(descripcion)) > 0),
+  cantidad NUMERIC(12,3) NOT NULL CHECK (cantidad > 0),
+  precio_neto_unitario NUMERIC(14,0) NOT NULL CHECK (precio_neto_unitario >= 0)
+);
+COMMENT ON TABLE detalle_presupuesto IS 'Lineas contratadas de un presupuesto. Conservan descripcion y precio acordados aunque cambie el catalogo. Solo se editan mientras el presupuesto esta Pendiente.';
+COMMENT ON COLUMN detalle_presupuesto.id_detalle_presupuesto IS 'Clave primaria entera autoincremental y no nula.';
+COMMENT ON COLUMN detalle_presupuesto.id_presupuesto IS 'Presupuesto al que pertenece la linea. Entero obligatorio y FK hacia presupuesto(id_presupuesto).';
+COMMENT ON COLUMN detalle_presupuesto.id_tarea IS 'Tarea del catalogo que origina la linea. Entero obligatorio y FK hacia tarea_servicio(id_tarea).';
+COMMENT ON COLUMN detalle_presupuesto.descripcion IS 'Descripcion acordada con el cliente, obligatoria de hasta 255 caracteres y no vacia; se conserva separada del nombre vigente en el catalogo.';
+COMMENT ON COLUMN detalle_presupuesto.cantidad IS 'Cantidad contratada positiva y obligatoria. NUMERIC(12,3), hasta tres decimales.';
+COMMENT ON COLUMN detalle_presupuesto.precio_neto_unitario IS 'Precio acordado sin IVA en pesos enteros, obligatorio y no negativo. NUMERIC(14,0); el backend controla el limite del total del presupuesto.';
+
 CREATE TABLE obra (
   id_obra                SERIAL PRIMARY KEY,
   nombre_obra            VARCHAR(150) NOT NULL, -- Nombre visible para identificar la obra
-  -- El cliente se obtiene desde el presupuesto asociado.
+  -- El cliente y la categoría se obtienen desde el presupuesto asociado.
   id_presupuesto         INT NOT NULL UNIQUE REFERENCES presupuesto(id_presupuesto), -- Un presupuesto por obra, sin compartirlo entre obras.
-  id_categoria_servicio  INT NOT NULL REFERENCES categoria_servicio(id_categoria_servicio),
   id_tecnico             INT NOT NULL REFERENCES usuario(id_usuario),
   estado                 VARCHAR(20) NOT NULL DEFAULT 'En proceso'
   CHECK (estado IN ('En proceso', 'Finalizada', 'Suspendida', 'Cancelada')),
   sin_materiales         BOOLEAN NOT NULL DEFAULT FALSE,
   fecha_creacion         TIMESTAMP NOT NULL DEFAULT now(),
-  fecha_cierre           TIMESTAMP
+  fecha_cierre           TIMESTAMP,
+  firma_conformidad      TEXT
 );
+
+COMMENT ON TABLE obra IS
+  'Trabajo asociado a un presupuesto y asignado a un técnico. El cliente y la categoría se obtienen desde el presupuesto; las hojas de servicio documentan las tareas contratadas. El backend controla las transiciones de estado y las condiciones para finalizar.';
+COMMENT ON COLUMN obra.id_obra IS
+  'Identificador de la obra. Clave primaria entera, autoincremental y no nula.';
+COMMENT ON COLUMN obra.nombre_obra IS
+  'Nombre visible para identificar el trabajo. Texto de hasta 150 caracteres, obligatorio.';
+COMMENT ON COLUMN obra.id_presupuesto IS
+  'Presupuesto que respalda la obra. Entero obligatorio, único y clave foránea hacia presupuesto(id_presupuesto). Cada obra tiene un presupuesto y un presupuesto puede estar asociado como máximo a una obra; el backend exige que esté Aprobado al crearla.';
+COMMENT ON COLUMN obra.id_tecnico IS
+  'Técnico asignado a la obra. Entero obligatorio y clave foránea hacia usuario(id_usuario). El backend comprueba el rol y la disponibilidad del usuario para la asignación.';
+COMMENT ON COLUMN obra.estado IS
+  'Estado de la obra. Texto de hasta 20 caracteres, obligatorio y predeterminado En proceso; CHECK admite En proceso, Finalizada, Suspendida o Cancelada. El backend controla los cambios permitidos y sus requisitos.';
+COMMENT ON COLUMN obra.sin_materiales IS
+  'Declaración de que el trabajo no utiliza materiales. Booleano obligatorio y predeterminado FALSE. Al finalizar, el backend comprueba que esta declaración sea compatible con los egresos vigentes y los consumos registrados.';
+COMMENT ON COLUMN obra.fecha_creacion IS
+  'Fecha y hora de creación de la obra. TIMESTAMP sin zona horaria, obligatorio y con valor predeterminado now(), correspondiente al inicio de la transacción si no se proporciona otro valor.';
+COMMENT ON COLUMN obra.fecha_cierre IS
+  'Fecha y hora de finalización confirmada desde el ERP. TIMESTAMP sin zona horaria que admite NULL; el backend la establece al pasar al estado Finalizada. No representa la fecha de suspensión o cancelación.';
+COMMENT ON COLUMN obra.firma_conformidad IS
+  'Firma de conformidad del cliente. TEXT que admite NULL, con trazos comprimidos y codificados en texto. Gamma la guarda al entregar el trabajo para revisión, conservando el estado En proceso. El supervisor o Administrador General confirma después la finalización desde el ERP y establece fecha_cierre. El trazo no se copia a auditoría ni se incluye en descargas de Gamma; se puede consultar en modo de solo lectura desde el detalle de la obra finalizada en el ERP.';
 
 CREATE TABLE documento_tributario (
   id_documento             SERIAL PRIMARY KEY,
@@ -390,21 +469,25 @@ CREATE TABLE documento_tributario (
   descuento_general        NUMERIC(5,2) NOT NULL DEFAULT 0 CHECK (descuento_general BETWEEN 0 AND 100),
   descuento_pronto_pago    NUMERIC(5,2) NOT NULL DEFAULT 0 CHECK (descuento_pronto_pago BETWEEN 0 AND 100),
   tasa_iva                 NUMERIC(5,2) NOT NULL DEFAULT 19 CHECK (tasa_iva BETWEEN 0 AND 100),
-  id_cliente               INT REFERENCES cliente(id_cliente),
   id_proveedor             INT REFERENCES proveedor(id_proveedor),
   id_obra                  INT REFERENCES obra(id_obra),
   id_documento_referencia  INT REFERENCES documento_tributario(id_documento),
-  estado_pago              VARCHAR(20) NOT NULL DEFAULT 'Pendiente'
-  CHECK (estado_pago IN ('Pendiente', 'Pagada')),
-  -- exactamente uno: cliente o proveedor
-  CONSTRAINT chk_cliente_o_proveedor
-    CHECK ((id_cliente IS NOT NULL)::int + (id_proveedor IS NOT NULL)::int = 1),
+  monto_neto_correccion    NUMERIC(14,2),
+  CONSTRAINT chk_monto_nota_credito CHECK (
+    (tipo_documento = 'nota_credito' AND monto_neto_correccion IS NOT NULL AND monto_neto_correccion > 0)
+    OR (tipo_documento <> 'nota_credito' AND monto_neto_correccion IS NULL)
+  ),
+  -- Los documentos de clientes obtienen su cliente desde la obra y el presupuesto.
+  CONSTRAINT chk_obra_o_proveedor
+    CHECK ((id_obra IS NOT NULL)::int + (id_proveedor IS NOT NULL)::int = 1),
   CONSTRAINT chk_vencimiento_factura
     CHECK (tipo_documento <> 'factura' OR fecha_vencimiento IS NOT NULL)
 );
 
 COMMENT ON TABLE documento_tributario IS
-  'Cabecera de documentos asociados a un proveedor o un cliente, exclusivamente uno de ellos. Actualmente se implementa la gestión de documentos de proveedores; registrar el documento no modifica existencias. Los totales se calculan desde sus detalles, descuentos e IVA. La facturación de clientes, gestión de pagos y aplicación automática de notas de crédito siguen pendientes.';
+  'Documentos de un proveedor o cliente. Las NC de proveedores corrigen montos de facturas sin materiales ni movimientos de stock; reducen el saldo junto con los pagos registrados. Los totales se calculan al consultar.';
+COMMENT ON COLUMN documento_tributario.monto_neto_correccion IS
+  'Rebaja neta global de una nota de credito. NUMERIC(14,2), obligatorio y positivo para NC mediante CHECK; NULL para los otros tipos. IVA fijo de 19% y total calculados sin duplicar columnas.';
 COMMENT ON COLUMN documento_tributario.id_documento IS
   'Identificador del documento. Clave primaria entera, autoincremental y no nula.';
 COMMENT ON COLUMN documento_tributario.tipo_documento IS
@@ -425,16 +508,55 @@ COMMENT ON COLUMN documento_tributario.descuento_pronto_pago IS
   'Porcentaje de descuento por pago anticipado concedido en el documento. Se aplica después del descuento general; no registra un pago. NUMERIC(5,2), obligatorio, predeterminado cero y limitado entre 0 y 100 mediante CHECK.';
 COMMENT ON COLUMN documento_tributario.tasa_iva IS
   'Porcentaje de IVA utilizado para calcular los importes del documento. NUMERIC(5,2), obligatorio, predeterminado 19 y limitado entre 0 y 100 mediante CHECK.';
-COMMENT ON COLUMN documento_tributario.id_cliente IS
-  'Cliente asociado al documento. Entero y clave foránea hacia cliente(id_cliente). Admite NULL individualmente, pero el CHECK exige exactamente uno entre id_cliente e id_proveedor. La gestión de documentos de clientes sigue pendiente.';
 COMMENT ON COLUMN documento_tributario.id_proveedor IS
-  'Proveedor asociado al documento. Entero y clave foránea hacia proveedor(id_proveedor). Admite NULL individualmente, pero el CHECK exige exactamente uno entre id_cliente e id_proveedor. El servicio actual de documentos de proveedores establece esta relación.';
+  'Proveedor asociado al documento. Entero y clave foránea hacia proveedor(id_proveedor). Admite NULL en documentos de clientes, cuyo cliente se obtiene desde la obra y el presupuesto. El CHECK exige exactamente uno entre id_obra e id_proveedor.';
 COMMENT ON COLUMN documento_tributario.id_obra IS
-  'Obra asociada al documento cuando corresponda. Entero opcional y clave foránea hacia obra(id_obra). El formulario actual de documentos de proveedores no establece esta relación.';
+  'Obra asociada al documento cuando corresponda. Entero opcional y clave foránea hacia obra(id_obra). La factura de cliente exige una obra finalizada y bloquea sus datos de cobro al confirmarse. El formulario de proveedores no establece esta relación.';
 COMMENT ON COLUMN documento_tributario.id_documento_referencia IS
-  'Documento original al que se refiere una nota de crédito. Entero opcional y clave foránea hacia documento_tributario(id_documento). El backend lo exige para notas de crédito del mismo proveedor, impide autorreferenciar el registro y no admite otra nota de crédito como original; la aplicación automática a inventario y costos sigue pendiente.';
-COMMENT ON COLUMN documento_tributario.estado_pago IS
-  'Estado de pago. Texto de hasta 20 caracteres, obligatorio y predeterminado Pendiente; CHECK admite Pendiente o Pagada. Se utiliza en las alertas de facturas. La gestión de pagos que actualice este estado sigue pendiente.';
+  'Factura original que corrige una NC del mismo proveedor o cliente. FK opcional a documento_tributario; el backend exige factura con saldo suficiente, bloquea la operación concurrente y no permite editar una NC registrada.';
+
+-- Una factura reúne guías completas; sus recepciones permanecen en cada guía.
+CREATE TABLE factura_guia (
+  id_factura INT NOT NULL REFERENCES documento_tributario(id_documento),
+  id_guia INT NOT NULL UNIQUE REFERENCES documento_tributario(id_documento),
+  PRIMARY KEY (id_factura,id_guia),
+  CHECK (id_factura <> id_guia)
+);
+COMMENT ON TABLE factura_guia IS
+  'Asocia una factura de proveedor con una o varias guías de despacho completas. Cada guía puede pertenecer como máximo a una factura. La clave primaria combina id_factura e id_guia; CHECK impide vincular un documento consigo mismo. El backend comprueba los tipos de documento y que pertenezcan al mismo proveedor; las recepciones permanecen en las guías, sin duplicar ingresos de stock.';
+COMMENT ON COLUMN factura_guia.id_factura IS
+  'Factura que agrupa las guías del proveedor. Entero obligatorio y clave foránea hacia documento_tributario(id_documento). Forma parte de la clave primaria compuesta y puede repetirse para asociar varias guías a una factura. El backend exige tipo factura.';
+COMMENT ON COLUMN factura_guia.id_guia IS
+  'Guía de despacho incluida en la factura. Entero obligatorio, único y clave foránea hacia documento_tributario(id_documento). Forma parte de la clave primaria compuesta; UNIQUE impide incluir la misma guía en otra factura. El backend exige tipo guia_despacho y el mismo proveedor de la factura.';
+
+CREATE TABLE pago_documento (
+  id_pago        SERIAL PRIMARY KEY,
+  id_documento   INT NOT NULL REFERENCES documento_tributario(id_documento),
+  monto          NUMERIC(16,2) NOT NULL CHECK (monto > 0),
+  fecha_pago     DATE NOT NULL,
+  id_usuario     INT NOT NULL REFERENCES usuario(id_usuario),
+  fecha_registro TIMESTAMPTZ NOT NULL DEFAULT now(),
+  observaciones  TEXT
+);
+
+CREATE INDEX idx_pago_documento_documento ON pago_documento (id_documento);
+
+COMMENT ON TABLE pago_documento IS
+  'Abonos individuales asociados a documentos. El total pagado, saldo y estado se calculan al consultar; no se almacenan en la cabecera. Se registran pagos de facturas y boletas de proveedores y pagos recibidos de facturas de clientes.';
+COMMENT ON COLUMN pago_documento.id_pago IS
+  'Identificador del abono. Clave primaria entera, autoincremental y no nula.';
+COMMENT ON COLUMN pago_documento.id_documento IS
+  'Documento al que corresponde el abono. Entero obligatorio y FK hacia documento_tributario(id_documento); un documento admite varios pagos.';
+COMMENT ON COLUMN pago_documento.monto IS
+  'Monto del abono en CLP. NUMERIC(16,2) obligatorio y mayor que cero, con hasta catorce enteros y dos decimales. El backend impide superar el saldo mediante bloqueo del documento.';
+COMMENT ON COLUMN pago_documento.fecha_pago IS
+  'Fecha efectiva del pago, elegida al registrar el abono. DATE obligatorio.';
+COMMENT ON COLUMN pago_documento.id_usuario IS
+  'Usuario que registra el abono. Entero obligatorio y FK hacia usuario(id_usuario), obtenido de la sesión autenticada.';
+COMMENT ON COLUMN pago_documento.fecha_registro IS
+  'Fecha y hora de registro en SIGEF. TIMESTAMPTZ obligatorio con valor predeterminado now().';
+COMMENT ON COLUMN pago_documento.observaciones IS
+  'Referencia o comentario del pago. TEXT opcional.';
 
 -- Líneas editables mientras el documento no tenga ingresos asociados; no representan recepción física.
 CREATE TABLE detalle_documento (
@@ -488,6 +610,17 @@ CREATE TABLE recepcion_material (
   )
 );
 
+COMMENT ON TABLE recepcion_material IS
+  'Constancia de recepción de materiales asignados a un técnico mediante movimientos USO_INTERNO. Los artículos y cantidades se consultan desde los movimientos asociados. La firma confirma la entrega al técnico; es distinta de la firma de conformidad del cliente en la obra. Sin firma ni fecha permanece pendiente; CHECK exige que ambas se completen juntas.';
+COMMENT ON COLUMN recepcion_material.id_recepcion IS
+  'Identificador de la recepción. Clave primaria entera, autoincremental y no nula. Los movimientos USO_INTERNO la referencian mediante movimiento_cardex.id_recepcion.';
+COMMENT ON COLUMN recepcion_material.id_usuario_receptor IS
+  'Técnico que recibe los materiales. Entero obligatorio y clave foránea hacia usuario(id_usuario). El backend valida el receptor de la asignación y permite confirmar la recepción desde Gamma únicamente al usuario correspondiente.';
+COMMENT ON COLUMN recepcion_material.firma IS
+  'Firma del técnico como constancia de recepción. TEXT que admite NULL mientras está pendiente; guarda trazos comprimidos y codificados en texto. CHECK impide una firma vacía o sin fecha_firma. El backend valida y guarda la firma al sincronizar la confirmación desde Gamma.';
+COMMENT ON COLUMN recepcion_material.fecha_firma IS
+  'Fecha y hora en que el servidor registra la firma al confirmar la recepción. TIMESTAMP sin zona horaria, sin valor predeterminado y que admite NULL mientras está pendiente. El backend asigna now() junto con la firma; CHECK impide una fecha sin firma.';
+
 CREATE TABLE movimiento_cardex (
   id_movimiento            SERIAL PRIMARY KEY,
   id_articulo              INT NOT NULL REFERENCES articulo(id_articulo),
@@ -526,13 +659,13 @@ COMMENT ON COLUMN movimiento_cardex.id_articulo IS
 COMMENT ON COLUMN movimiento_cardex.id_usuario IS
   'Usuario que registra el movimiento, obtenido por el backend desde la identidad autenticada. Entero obligatorio y clave foránea hacia usuario(id_usuario). En las salidas directas representa también a quien entrega; es distinto del técnico receptor.';
 COMMENT ON COLUMN movimiento_cardex.id_recepcion IS
-  'Recepción que identifica al técnico de una asignación de uso interno. Entero y clave foránea hacia recepcion_material(id_recepcion). CHECK exige un valor para USO_INTERNO y NULL para los demás tipos. La firma posterior desde Gamma está pendiente.';
+  'Recepción que identifica al técnico de una asignación de uso interno. Entero y clave foránea hacia recepcion_material(id_recepcion). CHECK exige un valor para USO_INTERNO y NULL para los demás tipos.';
 COMMENT ON COLUMN movimiento_cardex.id_obra IS
   'Obra asociada. Entero y clave foránea hacia obra(id_obra); obligatorio para EGRESO mediante CHECK y opcional para MERMA en el formulario actual. Cliente y presupuesto se obtienen desde la obra, sin duplicarlos aquí. La reversa conserva la obra del movimiento original.';
 COMMENT ON COLUMN movimiento_cardex.id_movimiento_revertido IS
   'Movimiento original corregido mediante REVERSA. Entero opcional y clave foránea hacia movimiento_cardex(id_movimiento). El backend exige la referencia para reversas, verifica el artículo y saldo reversible e impide revertir otra reversa. Admite correcciones parciales sin exceder el saldo del original.';
 COMMENT ON COLUMN movimiento_cardex.id_movimiento_origen IS
-  'Movimiento que origina la operación. Entero opcional y clave foránea hacia movimiento_cardex(id_movimiento). El registro actual lo utiliza en DEVOLUCION_PROVEEDOR para referenciar un INGRESO respaldado por un proveedor. Su uso para consumir una asignación USO_INTERNO desde Gamma sigue pendiente; el formulario de egreso de Bodega no permite esa referencia.';
+  'Movimiento que origina la operación. Entero opcional y clave foránea hacia movimiento_cardex(id_movimiento). En DEVOLUCION_PROVEEDOR referencia un INGRESO respaldado por un proveedor; en los consumos desde Gamma vincula el EGRESO con la asignación USO_INTERNO utilizada.';
 COMMENT ON COLUMN movimiento_cardex.id_detalle_documento IS
   'Línea del documento de compra a la que corresponde una recepción de materiales. Entero opcional y clave foránea hacia detalle_documento(id_detalle_documento). Permite obtener el documento y calcular recibido y pendiente. Los ingresos libres no tienen esta referencia; en devoluciones y reversas el respaldo se obtiene siguiendo el movimiento original.';
 COMMENT ON COLUMN movimiento_cardex.tipo_movimiento IS
@@ -590,39 +723,75 @@ COMMENT ON COLUMN detalle_inventario_fisico.stock_fisico IS
   'Cantidad encontrada físicamente en bodega, sin incluir material asignado a técnicos. NUMERIC(12,3), obligatorio y sin valor predeterminado; CHECK admite cero o valores positivos e impide cantidades negativas. El backend exige enteros para UN.';
 
 -- ---------- GAMMA ----------
-CREATE TABLE plantilla_checklist (
-  id_plantilla           SERIAL PRIMARY KEY,
-  id_categoria_servicio  INT NOT NULL REFERENCES categoria_servicio(id_categoria_servicio),
-  nombre_plantilla       VARCHAR(120) NOT NULL
-);
-
 CREATE TABLE item_checklist (
   id_item       SERIAL PRIMARY KEY,
-  id_plantilla  INT NOT NULL REFERENCES plantilla_checklist(id_plantilla),
-  pregunta      VARCHAR(255) NOT NULL
+  id_tarea      INT NOT NULL REFERENCES tarea_servicio(id_tarea),
+  pregunta      VARCHAR(255) NOT NULL CHECK (length(trim(pregunta)) > 0),
+  UNIQUE (id_tarea, pregunta)
 );
+COMMENT ON TABLE item_checklist IS
+  'Comprobaciones predeterminadas asociadas a una tarea del catálogo de servicios. Se copian a respuesta_checklist al registrar la hoja de servicio; modificar el catálogo no altera las comprobaciones ya guardadas en las hojas. Una tarea puede tener varios ítems, sin repetir el mismo texto dentro de esa tarea.';
+COMMENT ON COLUMN item_checklist.id_item IS
+  'Identificador del ítem de checklist. Clave primaria entera, autoincremental y no nula.';
+COMMENT ON COLUMN item_checklist.id_tarea IS
+  'Tarea del catálogo a la que pertenece la comprobación. Entero obligatorio y clave foránea hacia tarea_servicio(id_tarea). La combinación de tarea y pregunta es única.';
+COMMENT ON COLUMN item_checklist.pregunta IS
+  'Texto de la comprobación que realizará el técnico. Texto de hasta 255 caracteres, obligatorio; CHECK impide texto vacío o compuesto únicamente por espacios. UNIQUE impide repetir la misma pregunta dentro de la misma tarea, pero permite utilizarla en tareas distintas.';
 
 CREATE TABLE hoja_de_servicio (
   id_hoja_servicio      SERIAL PRIMARY KEY,
-  id_obra               INT NOT NULL REFERENCES obra(id_obra),
+  id_detalle_presupuesto INT NOT NULL UNIQUE REFERENCES detalle_presupuesto(id_detalle_presupuesto),
   id_usuario            INT NOT NULL REFERENCES usuario(id_usuario),
   fecha_servicio        TIMESTAMP NOT NULL DEFAULT now(),
-  horas_trabajadas      NUMERIC(5,2) NOT NULL DEFAULT 0,
-  firma_cliente_base64  TEXT,
+  horas_trabajadas      NUMERIC(5,2) NOT NULL DEFAULT 0 CHECK (horas_trabajadas >= 0 AND horas_trabajadas <> 'NaN'::numeric),
+  estado                VARCHAR(20) NOT NULL DEFAULT 'Borrador' CHECK (estado IN ('Borrador', 'Completada')),
   id_operacion_offline  VARCHAR(64) NOT NULL UNIQUE
 );
+COMMENT ON TABLE hoja_de_servicio IS
+  'Registro del trabajo realizado sobre una tarea contratada del presupuesto. Existe como máximo una hoja por línea del presupuesto; se continúa en Borrador y el backend bloquea su edición al completar. La obra y el cliente se obtienen desde el presupuesto asociado al detalle. La firma de conformidad final pertenece a obra, no a esta tabla.';
+COMMENT ON COLUMN hoja_de_servicio.id_hoja_servicio IS
+  'Identificador de la hoja de servicio. Clave primaria entera, autoincremental y no nula.';
+COMMENT ON COLUMN hoja_de_servicio.id_detalle_presupuesto IS
+  'Tarea contratada que documenta la hoja. Entero obligatorio, único y clave foránea hacia detalle_presupuesto(id_detalle_presupuesto). UNIQUE impide crear varias hojas para la misma línea; el backend comprueba que pertenezca a la obra del técnico.';
+COMMENT ON COLUMN hoja_de_servicio.id_usuario IS
+  'Técnico que registra la hoja, obtenido desde la identidad autenticada. Entero obligatorio y clave foránea hacia usuario(id_usuario). El backend valida que pueda trabajar en la obra y continuar esta hoja.';
+COMMENT ON COLUMN hoja_de_servicio.fecha_servicio IS
+  'Fecha y hora del servicio informadas desde Gamma. TIMESTAMP sin zona horaria, obligatorio y con valor predeterminado now() si se omite. El backend guarda la fecha enviada y permite actualizarla mientras la hoja permanece en Borrador; no equivale necesariamente al momento de sincronización.';
+COMMENT ON COLUMN hoja_de_servicio.horas_trabajadas IS
+  'Tiempo trabajado acumulado en la hoja, expresado en horas decimales. NUMERIC(5,2), obligatorio y predeterminado cero; CHECK impide valores negativos y NaN. La interfaz convierte horas y minutos al valor decimal, sin columnas adicionales; el backend exige tiempo mayor que cero para completar la hoja.';
+COMMENT ON COLUMN hoja_de_servicio.estado IS
+  'Estado de la hoja. Texto de hasta 20 caracteres, obligatorio y predeterminado Borrador; CHECK admite Borrador o Completada. El backend permite continuar un borrador y exige resolver las comprobaciones y validar las horas antes de completarlo.';
+COMMENT ON COLUMN hoja_de_servicio.id_operacion_offline IS
+  'UUID de la última operación confirmada para esta hoja. Texto de hasta 64 caracteres, obligatorio y único. Permite comprobar la versión al continuar desde un dispositivo y reconocer reintentos mediante auditoría; se actualiza al guardar un nuevo avance.';
 
 
 CREATE TABLE respuesta_checklist (
   id_respuesta      SERIAL PRIMARY KEY,
   id_hoja_servicio  INT NOT NULL REFERENCES hoja_de_servicio(id_hoja_servicio),
-  id_item           INT NOT NULL REFERENCES item_checklist(id_item),
-  valor_respuesta   VARCHAR(255),
-  UNIQUE (id_hoja_servicio, id_item) -- Una respuesta por ítem dentro de la hoja
+  id_item           INT REFERENCES item_checklist(id_item) ON DELETE SET NULL,
+  pregunta          VARCHAR(255) NOT NULL CHECK (length(trim(pregunta)) > 0),
+  estado            VARCHAR(20) NOT NULL DEFAULT 'Pendiente' CHECK (estado IN ('Pendiente', 'Completado', 'No aplica')),
+  observacion       VARCHAR(255),
+  CHECK (estado <> 'No aplica' OR length(trim(COALESCE(observacion, ''))) > 0),
+  UNIQUE (id_hoja_servicio, id_item),
+  UNIQUE (id_hoja_servicio, pregunta)
 );
+COMMENT ON TABLE respuesta_checklist IS
+  'Comprobaciones guardadas en una hoja de servicio y sus resultados. Conserva el texto utilizado aunque cambie el catálogo y permite comprobaciones propias del técnico sin id_item. UNIQUE impide repetir un ítem de catálogo o el mismo texto dentro de una hoja; No aplica exige una observación justificativa.';
+COMMENT ON COLUMN respuesta_checklist.id_respuesta IS
+  'Identificador de la respuesta. Clave primaria entera, autoincremental y no nula.';
+COMMENT ON COLUMN respuesta_checklist.id_hoja_servicio IS
+  'Hoja a la que pertenece la comprobación. Entero obligatorio y clave foránea hacia hoja_de_servicio(id_hoja_servicio). Una hoja puede tener varias respuestas.';
+COMMENT ON COLUMN respuesta_checklist.id_item IS
+  'Ítem del catálogo que originó la comprobación. Entero opcional y clave foránea hacia item_checklist(id_item). Admite NULL para comprobaciones propias del técnico; ON DELETE SET NULL conserva la respuesta y su texto si se elimina el ítem original. La combinación de hoja e ítem es única cuando id_item tiene valor.';
+COMMENT ON COLUMN respuesta_checklist.pregunta IS
+  'Texto de la comprobación guardado en la hoja, independiente de cambios posteriores del catálogo. Texto de hasta 255 caracteres, obligatorio; CHECK impide texto vacío o compuesto únicamente por espacios. La combinación de hoja y pregunta es única.';
+COMMENT ON COLUMN respuesta_checklist.estado IS
+  'Resultado de la comprobación. Texto de hasta 20 caracteres, obligatorio y predeterminado Pendiente; CHECK admite Pendiente, Completado o No aplica. El backend impide completar una hoja con comprobaciones pendientes.';
+COMMENT ON COLUMN respuesta_checklist.observacion IS
+  'Comentario del técnico sobre la comprobación. Texto de hasta 255 caracteres que admite NULL; CHECK exige una observación no vacía cuando el estado es No aplica para justificar por qué no corresponde realizarla.';
 
 -- Material consumido en una atención, separado de las respuestas del checklist.
--- El backend debe guardar consumo, EGRESO, saldo y auditoría en una transacción.
 CREATE TABLE material_utilizado (
   id_material_utilizado SERIAL PRIMARY KEY,
   id_hoja_servicio      INT NOT NULL REFERENCES hoja_de_servicio(id_hoja_servicio),
@@ -631,10 +800,127 @@ CREATE TABLE material_utilizado (
                         CHECK (length(trim(id_operacion_offline)) > 0)
 );
 
--- Reglas pendientes del servicio de consumo: comprobar que el movimiento de salida
--- sea EGRESO de la obra de la hoja; artículo y cantidad se obtienen de ese egreso.
--- Debe tener un único origen
--- USO_INTERNO del mismo artículo y técnico mediante id_movimiento_origen.
--- Si se utilizan dos entregas, registrar dos consumos con sus respectivos egresos.
--- Respetar los bloqueos del servicio de movimientos para no exceder el saldo asignado.
--- El identificador offline permite reconocer reintentos sin generar otro egreso.
+COMMENT ON TABLE material_utilizado IS
+  'Vincula los consumos registrados desde Gamma con la hoja de servicio correspondiente y su movimiento de egreso en el Cardex. El artículo, la cantidad, el costo y la asignación utilizada se obtienen desde el movimiento, sin duplicarlos en esta tabla. El backend guarda consumo, egreso, actualización de existencias y auditoría en una misma transacción.';
+COMMENT ON COLUMN material_utilizado.id_material_utilizado IS
+  'Identificador del registro de material utilizado. Clave primaria entera, autoincremental y no nula.';
+COMMENT ON COLUMN material_utilizado.id_hoja_servicio IS
+  'Hoja de servicio en la que se utilizó el material. Entero obligatorio y clave foránea hacia hoja_de_servicio(id_hoja_servicio). Una hoja puede tener varios registros de consumo; la tarea y la obra se obtienen desde el detalle del presupuesto asociado a la hoja.';
+COMMENT ON COLUMN material_utilizado.id_movimiento_egreso IS
+  'Movimiento del Cardex que descuenta el material utilizado. Entero obligatorio, único y clave foránea hacia movimiento_cardex(id_movimiento). UNIQUE impide asociar el mismo movimiento a varios registros de consumo; el backend genera un EGRESO para la obra correspondiente y lo vincula a la asignación USO_INTERNO consumida.';
+COMMENT ON COLUMN material_utilizado.id_operacion_offline IS
+  'Identificador del consumo dentro de una operación de sincronización. Texto de hasta 64 caracteres, obligatorio y único; CHECK impide texto vacío o compuesto únicamente por espacios. El backend lo construye con el UUID de la operación y el índice del material para distinguir los consumos y evitar duplicados.';
+
+-- BEGIN VISTAS RESUMEN
+-- Este bloque también lo utiliza crearVistasResumen.js sin recrear las tablas.
+-- Guardan resultados para el resumen; las operaciones del ERP no las refrescan automáticamente.
+-- El botón Actualizar llama al backend, que refresca las seis juntas mediante REFRESH MATERIALIZED VIEW.
+-- El backend exige cinco minutos desde el último refresco y bloquea actualizaciones simultáneas.
+-- Al crear las vistas se calculan sus resultados iniciales; consultar el resumen solo lee la copia guardada.
+
+-- Agrupa movimientos por mes, artículo y tipo para consultar cantidades y compras netas.
+-- Las reversas se relacionan con el tipo original y descuentan sus cantidades e importes.
+-- Solo los ingresos respaldados por proveedor aportan al importe de compras, redondeado a pesos.
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_resumen_movimientos AS
+WITH base AS (
+  SELECT date_trunc('month', m.fecha_hora)::date AS mes,
+    m.id_articulo, a.codigo_interno, a.nombre, a.unidad_medida,
+    m.tipo_movimiento,
+    CASE WHEN m.tipo_movimiento = 'REVERSA' THEN original.tipo_movimiento
+      ELSE m.tipo_movimiento END AS tipo_efectivo,
+    CASE WHEN m.tipo_movimiento = 'REVERSA' AND original.tipo_movimiento <> 'AJUSTE'
+      THEN -ABS(m.cantidad) ELSE m.cantidad END AS cantidad_neta,
+    m.costo_unitario, d.id_proveedor
+  FROM movimiento_cardex m
+  JOIN articulo a USING (id_articulo)
+  LEFT JOIN movimiento_cardex original ON original.id_movimiento = m.id_movimiento_revertido
+  LEFT JOIN detalle_documento l ON l.id_detalle_documento = COALESCE(m.id_detalle_documento, original.id_detalle_documento)
+  LEFT JOIN documento_tributario d ON d.id_documento = l.id_documento
+)
+SELECT mes, id_articulo, codigo_interno, nombre, unidad_medida, tipo_movimiento, tipo_efectivo,
+  SUM(cantidad_neta) AS cantidad, COUNT(*)::int AS registros,
+  SUM(CASE WHEN tipo_efectivo = 'INGRESO' AND id_proveedor IS NOT NULL
+    THEN ROUND(cantidad_neta * costo_unitario,0) ELSE 0 END) AS compras_netas
+FROM base
+GROUP BY mes, id_articulo, codigo_interno, nombre, unidad_medida, tipo_movimiento, tipo_efectivo;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_mv_resumen_movimientos
+  ON mv_resumen_movimientos (mes, id_articulo, tipo_movimiento, tipo_efectivo);
+COMMENT ON MATERIALIZED VIEW mv_resumen_movimientos IS
+  'Movimientos agrupados por mes y artículo; las reversas corrigen cantidades y compras del tipo original.';
+
+-- Conserva el saldo de facturas y boletas de proveedores al momento del refresco.
+-- Calcula el total con descuentos sucesivos e IVA y resta abonos y notas de crédito.
+-- En facturas que agrupan guías toma los importes de esas guías; no duplica recepciones.
+-- No incluye facturas de clientes ni cambia los documentos o pagos originales.
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_resumen_documentos AS
+SELECT d.id_documento, d.id_proveedor, d.folio, d.tipo_documento, d.fecha_vencimiento, p.razon_social,
+  ((CASE WHEN d.tipo_documento='nota_credito' AND d.monto_neto_correccion IS NOT NULL
+    THEN ROUND(d.monto_neto_correccion,0) + ROUND(ROUND(d.monto_neto_correccion,0) * 19 / 100,0)
+    WHEN EXISTS(SELECT 1 FROM factura_guia fg WHERE fg.id_factura=d.id_documento)
+    THEN (SELECT COALESCE(SUM((SELECT CASE WHEN g.tipo_documento='boleta' THEN importe ELSE importe + ROUND(importe * g.tasa_iva / 100,0) END
+        FROM (SELECT general - ROUND(general * g.descuento_pronto_pago / 100,0) AS importe
+            FROM (SELECT subtotal - ROUND(subtotal * g.descuento_general / 100,0) AS general
+                FROM (SELECT COALESCE(SUM(p3.valor),0) AS subtotal FROM detalle_documento l
+                    CROSS JOIN LATERAL (SELECT ROUND(l.cantidad * (CASE WHEN g.tipo_documento='boleta'
+                        THEN ROUND(l.costo_neto * (1+g.tasa_iva/100),0) ELSE l.costo_neto END),0) AS valor) b
+                    CROSS JOIN LATERAL (SELECT b.valor-ROUND(b.valor*l.descuento_1/100,0) AS valor) p1
+                    CROSS JOIN LATERAL (SELECT p1.valor-ROUND(p1.valor*l.descuento_2/100,0) AS valor) p2
+                    CROSS JOIN LATERAL (SELECT p2.valor-ROUND(p2.valor*l.descuento_3/100,0) AS valor) p3
+                    WHERE l.id_documento=g.id_documento) lineas) generales) importes)),0) FROM factura_guia fg
+        JOIN documento_tributario g ON g.id_documento=fg.id_guia WHERE fg.id_factura=d.id_documento)
+    ELSE (SELECT CASE WHEN d.tipo_documento='boleta' THEN importe ELSE importe + ROUND(importe * d.tasa_iva / 100,0) END
+        FROM (SELECT general - ROUND(general * d.descuento_pronto_pago / 100,0) AS importe
+            FROM (SELECT subtotal - ROUND(subtotal * d.descuento_general / 100,0) AS general
+                FROM (SELECT COALESCE(SUM(p3.valor),0) AS subtotal FROM detalle_documento l
+                    CROSS JOIN LATERAL (SELECT ROUND(l.cantidad * (CASE WHEN d.tipo_documento='boleta'
+                        THEN ROUND(l.costo_neto * (1+d.tasa_iva/100),0) ELSE l.costo_neto END),0) AS valor) b
+                    CROSS JOIN LATERAL (SELECT b.valor-ROUND(b.valor*l.descuento_1/100,0) AS valor) p1
+                    CROSS JOIN LATERAL (SELECT p1.valor-ROUND(p1.valor*l.descuento_2/100,0) AS valor) p2
+                    CROSS JOIN LATERAL (SELECT p2.valor-ROUND(p2.valor*l.descuento_3/100,0) AS valor) p3
+                    WHERE l.id_documento=d.id_documento) lineas) generales) importes) END) - COALESCE((SELECT SUM(a.monto) FROM pago_documento a WHERE a.id_documento=d.id_documento),0) - COALESCE((SELECT SUM(ROUND(nc.monto_neto_correccion,0) + ROUND(ROUND(nc.monto_neto_correccion,0) * 19 / 100,0))
+    FROM documento_tributario nc WHERE nc.id_documento_referencia=d.id_documento
+    AND nc.tipo_documento='nota_credito'),0)) AS saldo
+FROM documento_tributario d JOIN proveedor p USING (id_proveedor)
+WHERE d.tipo_documento IN ('factura', 'boleta');
+CREATE UNIQUE INDEX IF NOT EXISTS uq_mv_resumen_documentos ON mv_resumen_documentos (id_documento);
+COMMENT ON MATERIALIZED VIEW mv_resumen_documentos IS
+  'Saldos de proveedores al refrescar: descuentos sucesivos, IVA y abonos. No modifica el saldo operativo.';
+
+-- Lista artículos activos cuyo disponible está en el mínimo o por debajo.
+-- Disponible = stock_actual - stock_comprometido; diferencia = disponible - stock_minimo.
+-- Es una copia para el resumen; los movimientos siguen trabajando con el stock actual del artículo.
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_resumen_stock AS
+SELECT id_articulo, codigo_interno, nombre, unidad_medida,
+  (stock_actual - stock_comprometido)::text AS disponible, stock_minimo::text AS minimo,
+  stock_actual - stock_comprometido - stock_minimo AS diferencia
+FROM articulo WHERE activo = true AND stock_actual - stock_comprometido <= stock_minimo;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_mv_resumen_stock ON mv_resumen_stock (id_articulo);
+COMMENT ON MATERIALIZED VIEW mv_resumen_stock IS 'Artículos activos en mínimo o bajo, según disponibilidad al refrescar.';
+
+-- Cuenta presupuestos por mes de emisión y estado actual al refrescar.
+-- Permite mostrar cantidades de pendientes, aprobados y rechazados sin recorrer sus detalles.
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_resumen_presupuestos AS
+SELECT date_trunc('month', fecha_emision)::date AS mes, estado, COUNT(*)::int AS cantidad
+FROM presupuesto GROUP BY date_trunc('month', fecha_emision)::date, estado;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_mv_resumen_presupuestos ON mv_resumen_presupuestos (mes, estado);
+COMMENT ON MATERIALIZED VIEW mv_resumen_presupuestos IS
+  'Cantidad de presupuestos agrupados por mes de emisión y estado al refrescar. No conserva el historial de cambios de estado ni suma importes.';
+
+-- Cuenta obras por estado y mes de cierre para mostrar obras en proceso y servicios finalizados.
+-- La fecha técnica 0001-01-01 agrupa las obras sin fecha_cierre; no es una fecha real del trabajo.
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_resumen_obras AS
+SELECT estado, COALESCE(date_trunc('month', fecha_cierre)::date, DATE '0001-01-01') AS mes_cierre,
+  COUNT(*)::int AS cantidad
+FROM obra GROUP BY estado, COALESCE(date_trunc('month', fecha_cierre)::date, DATE '0001-01-01');
+CREATE UNIQUE INDEX IF NOT EXISTS uq_mv_resumen_obras ON mv_resumen_obras (estado, mes_cierre);
+COMMENT ON MATERIALIZED VIEW mv_resumen_obras IS 'Obras por estado y mes de cierre; 0001-01-01 representa ausencia de cierre.';
+
+-- Guarda una sola fila con la fecha y hora del refresco del conjunto.
+-- El backend la consulta para informar la última actualización y habilitar otra tras cinco minutos.
+-- No es un temporizador: cumplir el plazo no refresca las vistas sin pulsar Actualizar.
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_resumen_control AS
+SELECT 1 AS id, clock_timestamp() AS actualizado_en;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_mv_resumen_control ON mv_resumen_control (id);
+COMMENT ON MATERIALIZED VIEW mv_resumen_control IS
+  'Fecha del conjunto materializado, incluso vacío. El refresco manual exige cinco minutos y es transaccional.';
+-- END VISTAS RESUMEN

@@ -1,3 +1,4 @@
+import { pesos, evitarCambioConRueda } from '../../utils/importes';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../../api/cliente';
@@ -141,7 +142,7 @@ export default function Articulos({ soloFormulario = false, registroInicial = nu
                 <label>Descripción (opcional)<textarea name="descripcion" maxLength={5000} value={form.descripcion} onChange={cambiar} />
                     {errores.descripcion && <small>{errores.descripcion}</small>}
                 </label>
-                <label>Precio de lista (CLP) *<input name="precio_lista" type="number" min="0" max="99999999999999" step="1" required value={form.precio_lista} onChange={cambiar} />
+                <label>Precio de lista (CLP) *<input name="precio_lista" type="number" min="0" max="99999999999999" step="1" inputMode="numeric" onWheel={evitarCambioConRueda} required value={form.precio_lista} onChange={cambiar} />
                     {errores.precio_lista && <small>{errores.precio_lista}</small>}
                 </label>
                 <label>Stock mínimo *<input name="stock_minimo" type="number" min="0" max={form.unidad_medida === 'UN' ? '999999999' : '999999999.999'} step={form.unidad_medida === 'UN' ? '1' : '0.001'}
@@ -186,8 +187,8 @@ export default function Articulos({ soloFormulario = false, registroInicial = nu
                     <td>{articulo.nombre_categoria || 'Sin categoría'}</td><td>{unidades.find(([codigo]) => codigo === articulo.unidad_medida)?.[1] || articulo.unidad_medida}</td><td>{articulo.ubicacion_bodega || '—'}</td>
                     <td>{articulo.bodega_sector}</td><td>{articulo.descripcion || '—'}</td>
                     <td>{articulo.stock_actual}</td><td>{articulo.stock_comprometido}</td><td>{articulo.stock_disponible}</td><td>{articulo.stock_minimo}</td>
-                    <td>{articulo.precio_pmp}</td><td>{articulo.ultimo_costo_compra ?? 'Sin compras registradas'}</td>
-                    <td>{articulo.precio_lista}</td><td>{articulo.fecha_actualizacion_precio ? new Date(articulo.fecha_actualizacion_precio).toLocaleString('es-CL') : '—'}</td><td>{articulo.activo ? 'Activo' : 'Inactivo'}</td>
+                    <td>{pesos(articulo.precio_pmp)}</td><td>{articulo.ultimo_costo_compra == null ? 'Sin compras registradas' : pesos(articulo.ultimo_costo_compra)}</td>
+                    <td>{pesos(articulo.precio_lista)}</td><td>{articulo.fecha_actualizacion_precio ? new Date(articulo.fecha_actualizacion_precio).toLocaleString('es-CL') : '—'}</td><td>{articulo.activo ? 'Activo' : 'Inactivo'}</td>
                     <td>{articulo.stock_critico ? <span className="alpha-critico">Stock en mínimo o inferior</span> : '—'}</td>
                     <td><button disabled={guardando} onClick={() => editar(articulo)}>Editar</button>
                         <button type="button" disabled={guardando || !articulo.activo} title={!articulo.activo ? 'Artículo inactivo' : undefined} onClick={() => navigate(`/alpha/articulos/${articulo.id_articulo}/movimientos`)}>Movimientos</button></td>

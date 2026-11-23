@@ -1,0 +1,17 @@
+.resumen-tarjetas, .resumen-graficos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 1rem; }
+.resumen-graficos { grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+.resumen-indicador, .resumen-grafico { border: 1px solid #ccc; border-radius: .4rem; padding: 1rem; min-width: 0; }
+.resumen-indicador h3 { margin-top: 0; }
+.resumen-valor { font-size: 1.6rem; font-weight: bold; margin: .5rem 0; overflow-wrap: anywhere; }
+.resumen-aviso { border-left: .35rem solid #a01818; background: #fff7f7; }
+.resumen-aviso .resumen-valor { color: #a01818; }
+.resumen-grafico { margin: 0; border-color: #dce5ef; border-radius: .75rem; background: #fff; box-shadow: 0 3px 14px #21334708; }
+.resumen-grafico figcaption { font-weight: bold; margin-bottom: 1rem; color: #213347; line-height: 1.5; }
+.resumen-grafico-lienzo { width: 100%; min-width: 0; }
+.resumen-grafico-vacio { padding: 2rem 1rem; text-align: center; color: #536579; background: #f5f8fb; border-radius: .5rem; }
+.resumen-grafico-datos { margin-top: .75rem; border-top: 1px solid #e5ebf2; padding-top: .75rem; }
+.resumen-grafico-datos summary { cursor: pointer; color: #24588c; padding: .5rem 0; }
+.resumen-grafico-datos table { width: 100%; border-collapse: collapse; margin-top: .5rem; font-size: .875rem; }
+.resumen-grafico-datos th, .resumen-grafico-datos td { padding: .5rem; text-align: left; border-bottom: 1px solid #e5ebf2; overflow-wrap: anywhere; }
+.resumen-grafico-datos th[scope="row"] { font-weight: normal; }
+.resumen .alpha-filtros { align-items: end; }

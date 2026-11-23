@@ -1,0 +1,12 @@
+{
+  "//": "Configuración de la PWA para dispositivos móviles",
+  "name": "SIGEF Terreno",
+  "short_name": "SIGEF",
+  "lang": "es-CL",
+  "start_url": "/gamma/",
+  "scope": "/gamma/",
+  "display": "standalone",
+  "background_color": "#f3f6fa",
+  "theme_color": "#173b62",
+  "icons": [{ "src": "/gamma-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
