@@ -1,6 +1,11 @@
+/*
+ * Portal de terreno: organiza mis obras, recepciones, pendientes y navegación del técnico.
+ * Descarga datos para trabajar sin conexión y permite sincronizar los registros pendientes. Conserva los avisos de guardado y los errores para evitar pérdida de trabajo.
+ */
+
 import useBorrador from '../../hooks/useBorradorGamma';
 import HojaTarea from './HojaTarea';
-import { hojaActual } from '../../utils/hojasTerreno';
+import { hojaActual, unidadesObra } from '../../utils/hojasTerreno';
 import { fechaSantiago } from '../../utils/fechas';
 import { pesos, evitarCambioConRueda } from '../../utils/importes';
 import { useEffect, useState } from 'react';
@@ -28,9 +33,9 @@ function FormularioTerreno({ usuarioId, snapshot, tipo, operaciones, alGuardar, 
     const [guardado, setGuardado] = useState(false);
     const [estadoFirma, setEstadoFirma] = useState({ procesando: false, error: '' });
     const obra = snapshot.obras.find(item => String(item.id_obra) === String(datos.id_obra));
-    const resumenHojas=tipo==='CIERRE' ? (obra?.tareas || []).map(t=>{
-        const hoja=hojaActual(snapshot,operaciones,t.id_detalle_presupuesto);
-        return {id_detalle_presupuesto:t.id_detalle_presupuesto,descripcion:t.descripcion,
+    const resumenHojas=tipo==='CIERRE' ? unidadesObra(obra).map(t=>{
+        const hoja=hojaActual(snapshot,operaciones,t.id_detalle_presupuesto,t.numero_unidad);
+        return {id_detalle_presupuesto:t.id_detalle_presupuesto,numero_unidad:t.numero_unidad,cantidad_contratada:t.cantidad,descripcion:t.descripcion,
             estado:hoja?.estado || 'Sin iniciar',horas_trabajadas:hoja?.horas_trabajadas || '0',
             materiales:(hoja?.materiales || []).map(m=>{
                 const asignacion=(snapshot.asignaciones || []).find(a=>a.id_movimiento_asignacion===m.id_movimiento_asignacion);
@@ -81,9 +86,10 @@ function FormularioTerreno({ usuarioId, snapshot, tipo, operaciones, alGuardar, 
             {tipo === 'FIRMA_RECEPCION' ? <>
                 <label>Entrega pendiente<select required value={datos.id_recepcion} onChange={evento => cambiar({ ...datos, id_recepcion: evento.target.value, firma: '' })}>
                     <option value="">Selecciona una entrega</option>
-                    {recepciones.filter(item => !item.firmada && !recepcionesEnCola.has(String(item.id_recepcion))).map(item => <option key={item.id_recepcion} value={item.id_recepcion}>Recepción #{item.id_recepcion}</option>)}
+                    {recepciones.filter(item => !item.firmada && !recepcionesEnCola.has(String(item.id_recepcion))).map(item => <option key={item.id_recepcion} value={item.id_recepcion}>Recepción #{item.id_recepcion}{item.movimientos?.[0]?.tipo_movimiento==='EGRESO'?` · ${item.movimientos[0].nombre_obra || `Obra #${item.movimientos[0].id_obra}`}`:' · Uso interno'}</option>)}
                 </select></label>
                 {recepcion ? <ul>{(recepcion.movimientos || []).map((item, indice) => <li key={item.id_movimiento || indice}>{item.nombre}: {item.cantidad ?? item.cantidad_disponible} {item.unidad_medida}</li>)}</ul> : null}
+                {recepcion?.movimientos?.some(item=>item.tipo_movimiento==='EGRESO') && <p>Confirma que recibiste estos materiales para la obra. No debes volver a registrarlos como utilizados.</p>}
                 <Firma label="Firma de recepción del técnico" value={datos.firma} onChange={valor => editar('firma', valor)} onEstadoChange={setEstadoFirma} disabled={!listo || ocupado || guardado} />
             </> : <>
                 {!idObra && <label>Obra en proceso<select required value={datos.id_obra} onChange={evento => cambiar({ ...datos, id_obra: evento.target.value, ...(esHoja ? { respuestas: {}, materiales: {} } : {}) })}>
@@ -104,15 +110,15 @@ function FormularioTerreno({ usuarioId, snapshot, tipo, operaciones, alGuardar, 
 
 function Actividad({ snapshot, operaciones }) {
     const nombreTarea=id=>(snapshot?.obras || []).flatMap(o=>o.tareas || []).find(t=>Number(t.id_detalle_presupuesto)===Number(id))?.descripcion;
-    const claveHoja=(id,alternativa)=>id!=null?`hoja:${id}`:alternativa;
+    const claveHoja=(id,unidad,alternativa)=>id!=null?`hoja:${id}:${unidad ?? 'anterior'}`:alternativa;
     const registros = [
-        ...operaciones.filter(o=>o.estado!=='sustituida').map(o=>({clave:o.tipo==='HOJA'?claveHoja(o.datos.id_detalle_presupuesto,o.id_operacion_offline):o.id_operacion_offline,fecha:o.creado_en,
+        ...operaciones.filter(o=>o.estado!=='sustituida').map(o=>({clave:o.tipo==='HOJA'?claveHoja(o.datos.id_detalle_presupuesto,o.datos.numero_unidad,o.id_operacion_offline):o.id_operacion_offline,fecha:o.creado_en,
             texto:o.tipo==='HOJA'
-                ? `Hoja de servicio${nombreTarea(o.datos.id_detalle_presupuesto)?`: ${nombreTarea(o.datos.id_detalle_presupuesto)}`:''} - ${o.datos.estado || 'Borrador'} - ${o.estado==='enviada'?'sincronizada':o.estado}`
+                ? `Hoja de servicio${nombreTarea(o.datos.id_detalle_presupuesto)?`: ${nombreTarea(o.datos.id_detalle_presupuesto)}`:''} · Unidad ${o.datos.numero_unidad ?? 'sin indicar'} - ${o.datos.estado || 'Borrador'} - ${o.estado==='enviada'?'sincronizada':o.estado}`
                 : `${o.tipo === 'CIERRE' ? 'Entrega del trabajo' : o.tipo === 'PRESUPUESTO' ? 'Presupuesto' : 'Recepción'} - ${o.estado}`})),
-        ...(snapshot?.hojas || []).filter(h=>!operaciones.some(o=>o.id_operacion_offline===h.id_operacion_offline || (o.tipo==='HOJA' && Number(o.datos.id_detalle_presupuesto)===Number(h.id_detalle_presupuesto))))
-            .map(h=>({clave:claveHoja(h.id_detalle_presupuesto,`servidor:${h.id_hoja_servicio}`),fecha:h.fecha_servicio,
-                texto:`Hoja de servicio${nombreTarea(h.id_detalle_presupuesto)?`: ${nombreTarea(h.id_detalle_presupuesto)}`:''} - ${h.estado || 'Borrador'} - sincronizada`}))
+        ...(snapshot?.hojas || []).filter(h=>!operaciones.some(o=>o.id_operacion_offline===h.id_operacion_offline || (o.tipo==='HOJA' && Number(o.datos.id_detalle_presupuesto)===Number(h.id_detalle_presupuesto) && Number(o.datos.numero_unidad ?? 1)===Number(h.numero_unidad))))
+            .map(h=>({clave:claveHoja(h.id_detalle_presupuesto,h.numero_unidad,`servidor:${h.id_hoja_servicio}`),fecha:h.fecha_servicio,
+                texto:`Hoja de servicio${nombreTarea(h.id_detalle_presupuesto)?`: ${nombreTarea(h.id_detalle_presupuesto)}`:''} · Unidad ${h.numero_unidad} - ${h.estado || 'Borrador'} - sincronizada`}))
     ].sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
     // Muestra la última versión por tarea, sin eliminar operaciones de la cola.
     const vistas=new Set();
@@ -148,7 +154,7 @@ function PresupuestoTerreno({ usuarioId, snapshot, obra, alGuardar }) {
         e.preventDefault();setFallo('');setOcupado(true);
         try {
             if(!detalles.length) throw new Error('Agrega al menos una tarea.');
-            if(detalles.some(l=>!/^\d{1,9}$/.test(String(l.cantidad)) || Number(l.cantidad)<1 || !/^\d{1,14}$/.test(String(l.precio_neto_unitario)) || !l.descripcion.trim())) throw new Error('Revisa cantidades, descripciones y precios.');
+            if(detalles.some(l=>!/^\d{1,3}$/.test(String(l.cantidad)) || Number(l.cantidad)<1 || Number(l.cantidad)>100 || !/^\d{1,14}$/.test(String(l.precio_neto_unitario)) || !l.descripcion.trim())) throw new Error('Revisa cantidades entre 1 y 100, descripciones y precios.');
             if(subtotal+iva>999999999999n) throw new Error('El total supera el importe permitido.');
             await guardarOperacion(usuarioId,'PRESUPUESTO',{id_obra:obra.id_obra,id_categoria_servicio:Number(datos.id_categoria_servicio),detalles});
             await limpiar();await alGuardar();setMensaje('Presupuesto guardado. Envía desde Pendientes para su revisión en oficina.');
@@ -162,7 +168,7 @@ function PresupuestoTerreno({ usuarioId, snapshot, obra, alGuardar }) {
             {datos.id_categoria_servicio && <label>Agregar tarea<select value="" onChange={e=>{const t=tareas.find(t=>String(t.id_tarea)===e.target.value);if(t && !detalles.some(l=>l.id_tarea===t.id_tarea)) cambiar({...datos,detalles:[...detalles,{id_tarea:t.id_tarea,descripcion:t.nombre_tarea,cantidad:'1',precio_neto_unitario:String(t.precio_neto).split('.')[0]}]});}}><option value="">Selecciona una tarea</option>{tareas.map(t=><option key={t.id_tarea} value={t.id_tarea} disabled={detalles.some(l=>l.id_tarea===t.id_tarea)}>{t.nombre_tarea} - ${pesos(t.precio_neto)}</option>)}</select></label>}
             {detalles.map((l,i)=><fieldset className="gamma-panel" key={l.id_tarea}><legend>{l.descripcion}</legend>
                 <label>Descripción<input required maxLength="255" value={l.descripcion} onChange={e=>modificar(i,'descripcion',e.target.value)} /></label>
-                <div className="gamma-campos"><label>Cantidad<input required type="number" min="1" max="999999999" step="1" inputMode="numeric" value={l.cantidad} onChange={e=>modificar(i,'cantidad',e.target.value)} /></label>
+                <div className="gamma-campos"><label>Cantidad<input required type="number" min="1" max="100" step="1" inputMode="numeric" value={l.cantidad} onChange={e=>modificar(i,'cantidad',e.target.value)} /></label>
                 <label>Precio neto unitario (CLP)<input required type="number" min="0" max="99999999999999" step="1" inputMode="numeric" onWheel={evitarCambioConRueda} value={l.precio_neto_unitario} onChange={e=>modificar(i,'precio_neto_unitario',e.target.value)} /></label></div>
                 <button type="button" onClick={()=>cambiar({...datos,detalles:detalles.filter((_,j)=>j!==i)})}>Quitar tarea</button>
             </fieldset>)}
@@ -173,10 +179,12 @@ function PresupuestoTerreno({ usuarioId, snapshot, obra, alGuardar }) {
 }
 
 function HojaDeObra({usuarioId,snapshot,operaciones,obra,alGuardar}) {
-    const {idDetalle}=useParams();
+    const {idDetalle,unidad}=useParams();
     const tarea=(obra.tareas || []).find(t=>String(t.id_detalle_presupuesto)===idDetalle);
     if(!tarea) return <p role="alert">La tarea no pertenece a esta obra o no esta descargada.</p>;
-    return <HojaTarea key={idDetalle} usuarioId={usuarioId} snapshot={snapshot} operaciones={operaciones} obra={obra} tarea={tarea} alGuardar={alGuardar} />;
+    const numeroUnidad=Number(unidad || 1);
+    if(!Number.isInteger(numeroUnidad)||numeroUnidad<1||numeroUnidad>Number(tarea.cantidad))return <p role="alert">La unidad no pertenece a esta tarea contratada.</p>;
+    return <HojaTarea key={`${idDetalle}:${numeroUnidad}`} usuarioId={usuarioId} snapshot={snapshot} operaciones={operaciones} obra={obra} tarea={tarea} numeroUnidad={numeroUnidad} alGuardar={alGuardar} />;
 }
 
 function ApartadoObra({ snapshot, usuarioId, operaciones, alGuardar }) {
@@ -187,17 +195,19 @@ function ApartadoObra({ snapshot, usuarioId, operaciones, alGuardar }) {
     const locales=operaciones.filter(o=>o.tipo==='HOJA' && String(o.datos.id_obra)===idObra && !['rechazada','sustituida'].includes(o.estado));
     const cierre=operaciones.some(o=>o.tipo==='CIERRE' && String(o.datos.id_obra)===idObra && o.estado!=='rechazada');
     const puedeTrabajar=obra.estado==='En proceso' && !cierre;
-    const puedeCerrar=puedeTrabajar && !!obra.tareas?.length && obra.tareas.every(t=>hojaActual(snapshot,operaciones,t.id_detalle_presupuesto)?.estado==='Completada');
+    const unidades=unidadesObra(obra);
+    const puedeCerrar=puedeTrabajar && !!unidades.length && unidades.every(t=>hojaActual(snapshot,operaciones,t.id_detalle_presupuesto,t.numero_unidad)?.estado==='Completada');
     return <section><Link className="gamma-volver" to="/gamma/obras">Volver a mis obras</Link><h2>{obra.razon_social}</h2><p>{obraNombre(obra)} · {obra.nombre_servicio} · {obra.estado}</p>
         <Routes>
             <Route path="tareas/:idDetalle" element={obra.estado==='En proceso' ? <HojaDeObra usuarioId={usuarioId} snapshot={snapshot} operaciones={operaciones} obra={obra} alGuardar={alGuardar} /> : <p>La obra no admite nuevos registros.</p>} />
+            <Route path="tareas/:idDetalle/unidades/:unidad" element={obra.estado==='En proceso' ? <HojaDeObra usuarioId={usuarioId} snapshot={snapshot} operaciones={operaciones} obra={obra} alGuardar={alGuardar} /> : <p>La obra no admite nuevos registros.</p>} />
             <Route path="presupuesto" element={puedeTrabajar ? <PresupuestoTerreno key={idObra} usuarioId={usuarioId} snapshot={snapshot} obra={obra} alGuardar={alGuardar} /> : <p>La obra no admite nuevos registros.</p>} />
             <Route path="cierre" element={puedeCerrar ? <FormularioTerreno key={`CIERRE:${idObra}`} usuarioId={usuarioId} snapshot={snapshot} tipo="CIERRE" operaciones={operaciones} alGuardar={alGuardar} idObra={idObra} /> : cierre ? <p role="status">Trabajo guardado. Sincroniza desde Pendientes para enviarlo a revisión.</p> : <p>Completa las hojas de todas las tareas antes de enviar el trabajo.</p>} />
             <Route path="*" element={<>
                 <section className="gamma-panel"><h3>Tareas contratadas</h3>
-                    {obra.tareas?.length ? <div className="gamma-obras">{obra.tareas.map(t=>{
-                        const hoja=hojaActual(snapshot,operaciones,t.id_detalle_presupuesto);
-                        return <Link className="gamma-tarjeta" key={t.id_detalle_presupuesto} to={`tareas/${t.id_detalle_presupuesto}`}><strong>{t.descripcion}</strong><span>Cantidad: {Number(t.cantidad)} · {hoja?.estado || 'Sin iniciar'}</span><span>{!hoja?'Iniciar tarea':hoja.estado==='Completada'?'Ver hoja':'Continuar hoja'}</span></Link>;
+                    {unidades.length ? <div className="gamma-obras">{unidades.map(t=>{
+                        const hoja=hojaActual(snapshot,operaciones,t.id_detalle_presupuesto,t.numero_unidad);
+                        return <Link className="gamma-tarjeta" key={`${t.id_detalle_presupuesto}:${t.numero_unidad}`} to={`tareas/${t.id_detalle_presupuesto}/unidades/${t.numero_unidad}`}><strong>{t.descripcion}</strong><span>Unidad {t.numero_unidad} de {Number(t.cantidad)} · {hoja?.estado || 'Sin iniciar'}</span><span>{!hoja?'Iniciar tarea':hoja.estado==='Completada'?'Ver hoja':'Continuar hoja'}</span></Link>;
                     })}</div> : <p>El presupuesto no contiene tareas detalladas. Revisa su definicion en el ERP.</p>}
                     <p>Hojas sincronizadas: {hojas.length}. Actualizaciones locales: {locales.filter(o=>o.estado!=='enviada').length}.</p>
                 </section>
@@ -253,7 +263,7 @@ export default function PortalGamma() {
     for(const item of [...operaciones].sort((a,b)=>String(b.creado_en).localeCompare(String(a.creado_en)))) {
         if(item.estado==='sustituida')continue;
         const clave=item.tipo==='HOJA' && item.datos.id_detalle_presupuesto!=null
-            ? `hoja:${item.datos.id_detalle_presupuesto}` : item.id_operacion_offline;
+            ? `hoja:${item.datos.id_detalle_presupuesto}:${item.datos.numero_unidad ?? 'anterior'}` : item.id_operacion_offline;
         if(!gruposEnvio.has(clave))gruposEnvio.set(clave,{...item,versiones:[]});
         gruposEnvio.get(clave).versiones.push(item);
     }
@@ -279,10 +289,10 @@ export default function PortalGamma() {
                     const tarea=(snapshot?.obras || []).flatMap(o=>o.tareas || []).find(t=>Number(t.id_detalle_presupuesto)===Number(item.datos.id_detalle_presupuesto));
                     return <article className="gamma-panel" key={item.id_operacion_offline}>
                         <h3>{item.tipo==='CIERRE'?'Entrega del trabajo':item.tipo==='HOJA'?`Hoja de servicio${tarea?`: ${tarea.descripcion}`:''}`:item.tipo==='PRESUPUESTO'?'Presupuesto':'Firma de recepción'}</h3>
-                        {item.tipo==='HOJA' && <p>Hoja: <strong>{item.datos.estado || 'Borrador'}</strong></p>}
+                        {item.tipo==='HOJA' && <p>Unidad {item.datos.numero_unidad ?? 'sin indicar'} · Hoja: <strong>{item.datos.estado || 'Borrador'}</strong></p>}
                         <p>Último envío: <strong>{item.estado}</strong> · {item.datos.id_obra ? obraNombre(snapshot?.obras.find(o=>o.id_obra===Number(item.datos.id_obra)) || {id_obra:item.datos.id_obra}) : `Recepción #${item.datos.id_recepcion}`}</p>
                         {item.versiones.filter(v=>v.error).map(v=><p role="alert" key={v.id_operacion_offline}>{typeof v.error==='string'?v.error:v.error.mensaje || 'No se pudo enviar el registro.'}</p>)}
-                        {item.tipo==='HOJA' && item.versiones.some(v=>v.estado==='rechazada') && <Link className="gamma-volver" to={`/gamma/obras/${item.datos.id_obra}/tareas/${item.datos.id_detalle_presupuesto}`}>Revisar y corregir hoja</Link>}
+                        {item.tipo==='HOJA' && item.versiones.some(v=>v.estado==='rechazada') && <Link className="gamma-volver" to={`/gamma/obras/${item.datos.id_obra}/tareas/${item.datos.id_detalle_presupuesto}/unidades/${item.datos.numero_unidad ?? 1}`}>Revisar y corregir hoja</Link>}
                     </article>;
                 })}
             </section>} />

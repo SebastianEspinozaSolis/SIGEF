@@ -12,6 +12,8 @@ Gamma conserva el contrato offline de fecha de servicio `AAAA-MM-DD`: el backend
 
 ## Abonos y alertas de facturas de clientes
 
+El menú principal incluye también `obras-por-cerrar` y `presupuestos-pendientes`, solo para Supervisor de Obras y Administrador General. La primera consulta obras En proceso con al menos una tarea contratada y todas sus hojas Completadas; no exige firma para avisar ni finaliza automáticamente. La segunda consulta presupuestos Pendientes. Ambas se consultan en vivo, muestran cinco registros por página y enlazan al detalle existente. Administración y Bodega mantienen únicamente sus tipos de alertas anteriores; el backend verifica permisos por tipo.
+
 `modules/pagos-documento/service.js` reutiliza `pago_documento` para proveedores y clientes. Para una factura de cliente obtiene el total reconstruido mediante `facturas-cliente/service.js`; las NC de monto y abonos se restan al saldo. Admite pagos parciales y completos en pesos enteros. La factura se bloquea antes de consultar su saldo, igual que al registrar una NC; pagos concurrentes no pueden superar lo pendiente. Pago y auditoría se confirman juntos y el UUID impide duplicar reintentos. Las notas de crédito no reciben abonos. Listado e historial conservan el endpoint `/api/pagos-documento/:id`, restringido a Administración/Administrador General.
 
 `modules/alertas/service.js` añade `clientes-por-vencer` y `clientes-vencidas`. Consulta saldos en vivo, con vencimientos entre hoy y siete días o anteriores a hoy, según America/Santiago. Excluye facturas saldadas, devuelve días restantes y pagina cinco registros. `utils/pagos.js` contiene `totalFacturaClienteSql`, que replica el precio histórico, las reversas y el redondeo al peso del cálculo de factura. No se añaden vistas ni columnas para estas alertas. Los indicadores del resumen materializado siguen siendo independientes.
@@ -123,7 +125,7 @@ No hay edición ni eliminación de pagos en esta entrega. Los documentos con abo
 | Carpeta | Responsabilidad |
 |---|---|
 | `src/modules/categorias-servicio/` | Listar, crear y editar los tipos de servicio existentes en el schema. |
-| `src/modules/presupuestos/` | Presupuestos de monto manual, selector limitado de clientes, edición de Pendiente y aprobación/rechazo. |
+| `src/modules/presupuestos/` | Presupuestos con categoría obligatoria y tareas, total calculado, selector limitado de clientes, edición de Pendiente y aprobación/rechazo. |
 | `src/modules/obras/` | Obras desde presupuestos aprobados, técnico activo, estados iniciales y consulta de egresos netos de reversas. |
 
 Cada carpeta conserva `routes.js` para URLs/permisos y `service.js` para validaciones, consultas y auditoría transaccional. Acceden Supervisor de Obras y Administrador General. El cierre sigue bloqueado hasta disponer de horas y respaldo de costos. El contrato para el frontend está en [BETA.md](BETA.md).
@@ -398,11 +400,11 @@ La fecha de vencimiento es obligatoria cuando `tipo_documento` es `factura`, tan
 
 ### Egreso de Bodega y consumo futuro de Gamma (comportamiento vigente)
 
-El EGRESO de Bodega exige obra, cantidad y justificación; registra al usuario autenticado y el precio de lista vigente. No pide receptor, no crea recepción y no admite `id_movimiento_origen`. Se retiró del formulario el check de consumir asignaciones y se rechaza esa referencia también en el backend. El selector de referencias ya no ofrece EGRESO. El stock comprometido sigue protegido: el egreso directo solo consume disponible.
+El EGRESO de Bodega exige obra, cantidad y justificación; registra al usuario autenticado y el precio de lista vigente. No pide receptor: crea una recepción pendiente para el técnico asignado a la obra y no admite `id_movimiento_origen`. Se retiró del formulario el check de consumir asignaciones y se rechaza esa referencia también en el backend. El selector de referencias ya no ofrece EGRESO. El stock comprometido sigue protegido: el egreso directo solo consume disponible.
 
-`id_recepcion` se guarda únicamente para USO_INTERNO, que exige técnico activo y mantiene su recepción para futura firma. `chk_datos_egreso` ya no exige recepción; `chk_recepcion_uso_interno` exige que solo USO_INTERNO tenga esa FK y que no le falte. Las reversas no copian esa FK: conservan el enlace al original para trazabilidad. No se eliminan recepciones antiguas ni se adapta la base instalada.
+`id_recepcion` es obligatorio en USO_INTERNO y opcional en EGRESO mediante `chk_recepcion_material`; debe ser NULL en los demás tipos. Los nuevos egresos directos de Bodega crean una recepción para el técnico activo de la obra. Los egresos históricos sin recepción se conservan. Las reversas siguen el movimiento original y no copian su recepción.
 
-El consumo de material asignado se implementará desde Gamma al registrar materiales utilizados. La aritmética y lectura de consumos históricos se conservan, pero el endpoint de Bodega no habilita ese flujo. Gamma deberá generar el egreso con origen, validar técnico, obra y saldo, y reducir total y comprometido sin copiar `id_recepcion` al egreso. No existe aún un endpoint Gamma para hacerlo.
+Gamma registra el consumo de asignaciones USO_INTERNO desde las hojas de servicio: valida técnico, firma, obra y saldo, y reduce stock total y comprometido. Estos egresos no crean una segunda recepción. Los egresos directos solo se muestran para firmar su entrega; no aparecen como asignaciones consumibles.
 
 
 ### Desglose del comprobante de compra
@@ -461,7 +463,9 @@ El control solo conoce lo persistido. Gamma aún no registra hojas ni consumos p
 
 ### Facturas asociadas a guias y boletas con precio bruto
 
-`documentos-proveedor/service.js` registra facturas directas o con `guias: [id_documento, ...]`. `GET /api/documentos-proveedor/:proveedor/guias-disponibles` ofrece guias sin factura, con busqueda y paginacion. La seleccion definitiva se valida bajo bloqueo; los vinculos de `factura_guia` son permanentes y los datos monetarios de esas guias quedan protegidos. La factura agrupada no admite recepcion propia.
+`documentos-proveedor/service.js` registra facturas directas o con `guias: [id_documento, ...]`. `GET /api/documentos-proveedor/:proveedor/guias-disponibles` ofrece guias sin factura, con busqueda y paginacion. La seleccion definitiva se valida bajo bloqueo; los vinculos guardados en `documento_tributario.id_factura` son permanentes y los datos monetarios de esas guias quedan protegidos. La factura agrupada no admite recepcion propia.
+
+`id_factura` es una FK autorreferencial opcional: una fila de tipo guía apunta al `id_documento` de otra fila de la misma tabla, de tipo factura. Se deja en NULL al registrar la guía y se asigna cuando se registra la factura que la agrupa. Una factura puede reunir varias guías y cada guía pertenecer como máximo a una factura. El CHECK impide apuntar a la propia fila y limita el vínculo a guías de proveedor; el backend valida el tipo y proveedor de la factura referenciada. No requiere tabla intermedia ni genera otro ingreso de stock.
 
 Las boletas reciben `detalles[].costo_bruto` en pesos enteros. `utils/importesDocumento.js` convierte al costo neto con cuatro decimales para inventario, recupera el bruto para descuentos y desglosa IVA incluido. Su pago completo y ambas auditorias se guardan en la misma transaccion. Factura, boleta y guia utilizan IVA fijo del 19 % en nuevas escrituras; las notas de credito aplican una rebaja global al saldo, sin movimientos fisicos.
 
@@ -470,7 +474,7 @@ Las boletas reciben `detalles[].costo_bruto` en pesos enteros. `utils/importesDo
 
 ### Nota de credito: correccion global de monto
 
-La NC registra folio, emision, motivo obligatorio, factura original y `monto_neto_correccion`. No tiene vencimiento ni lineas de materiales. La columna NUMERIC(14,0) guarda pesos enteros, obligatorios y positivos solo para NC mediante `chk_monto_nota_credito`; en otros documentos permanece NULL. IVA 19 % y total se calculan, sin columnas derivadas. Los totales de presupuestos y los montos de pagos también se almacenan como NUMERIC(14,0); los costos unitarios y el PMP conservan cuatro decimales. El backend rechaza fracciones en montos finales, incluidos presupuestos manuales antiguos.
+La NC registra folio, emision, motivo obligatorio, factura original y `monto_neto_correccion`. No tiene vencimiento ni lineas de materiales. La columna NUMERIC(14,0) guarda pesos enteros, obligatorios y positivos solo para NC mediante `chk_monto_nota_credito`; en otros documentos permanece NULL. IVA 19 % y total se calculan, sin columnas derivadas. Los totales de presupuestos y los montos de pagos también se almacenan como NUMERIC(14,0); los costos unitarios y el PMP conservan cuatro decimales. El backend rechaza fracciones en montos finales.
 
 El selector de referencias ofrece facturas del mismo proveedor con saldo positivo, por folio, fecha y saldo. El servidor bloquea la factura antes de validar y registrar: `saldo = total factura - pagos - total notas de credito`. La rebaja con IVA no puede superar ese saldo. Documento y auditoria se guardan en la misma transaccion; no se escribe en Cardex. Una NC registrada no admite edicion. Las facturas con NC conservan sus importes y detalles; solo permiten cambios de metadata si no existen otros bloqueos.
 
@@ -481,10 +485,18 @@ Los pagos posteriores, listados y alertas usan el saldo reducido. El resumen con
 
 - `src/modules/tareas-servicio/routes.js`: CRUD sin borrado, protegido para Administrador General y Supervisor; URL `/api/tareas-servicio`.
 - `src/modules/tareas-servicio/service.js`: lista, filtra, crea, edita e inactiva tareas por categoria con precio neto sugerido entero; auditoria atomica.
-- `src/modules/presupuestos/service.js`: nuevos presupuestos con categoria y lineas, conserva descripciones/precios acordados y bloquea edicion tras aprobar/rechazar. Mantiene compatibilidad con montos manuales anteriores y de Gamma.
+- `src/modules/presupuestos/service.js`: presupuestos con categoria y lineas obligatorias, conserva descripciones/precios acordados y bloquea edicion tras aprobar/rechazar. El total se calcula desde las tareas tanto en Oficina como en Gamma.
 - `src/utils/importesPresupuesto.js`: calculo con BigInt, redondeo por linea a pesos y luego IVA19; controla el limite de `presupuesto.monto_total`.
-- `src/modules/obras/service.js`: exige que la categoria coincida con la del presupuesto detallado aprobado; las obras de presupuestos manuales mantienen seleccion de categoria.
+- `src/modules/obras/service.js`: obtiene la categoria del presupuesto aprobado; no se guarda una categoria independiente en la obra. Todos los presupuestos requieren categoria y tareas.
 
-Schema: `tarea_servicio`, `detalle_presupuesto` y `presupuesto.id_categoria_servicio` (nullable para historicos). No modifica checklists ni agrega tipos de movimiento. El contrato completo se encuentra en `BETA.md`.
+Schema: `tarea_servicio`, `detalle_presupuesto` y `presupuesto.id_categoria_servicio` obligatorio. No modifica checklists ni agrega tipos de movimiento. El contrato completo se encuentra en `BETA.md`.
 
-Checklist por tarea: `modules/tareas-servicio/service.js` consulta y mantiene item_checklist con la tarea y su auditoria en una misma transaccion. `modules/gamma/service.js` valida la tarea contratada, crea o continua la hoja unica, conserva copias de comprobaciones y calcula egresos incrementales. `modules/obras/service.js` deriva la obra desde detalle_presupuesto al comprobar las hojas y bloquea el cierre si alguna tarea no esta Completada. El catalogo predeterminado de ejemplo se encuentra en el bloque ITEMS CHECKLIST de db/seed.sql. Se retiro plantilla_checklist del modelo.
+Checklist por tarea: `modules/tareas-servicio/service.js` consulta y mantiene item_checklist con la tarea y su auditoria en una misma transaccion. `modules/gamma/service.js` valida la tarea contratada, crea o continua la hoja de cada unidad contratada, conserva copias de comprobaciones y calcula egresos incrementales. `modules/obras/service.js` deriva la obra desde detalle_presupuesto al comprobar las hojas y bloquea el cierre si falta completar alguna unidad contratada. El catalogo predeterminado de ejemplo se encuentra en el bloque ITEMS CHECKLIST de db/seed.sql. Se retiro plantilla_checklist del modelo.
+
+La obligatoriedad de `presupuesto.id_categoria_servicio` y `registro_auditoria.id_usuario` se exige tambi?n mediante NOT NULL en PostgreSQL. Las firmas pendientes, referencias condicionales de documentos/Cardex y observaciones opcionales conservan NULL seg?n su flujo.
+
+La descarga de Gamma incluye las recepciones del técnico con tipo de movimiento y nombre de obra para egresos directos. La firma se sincroniza por FIRMA_RECEPCION, con control de propietario, auditoría sin trazos e idempotencia. Confirmar recepción no genera movimientos ni cambia stock.
+
+Los documentos de proveedores y clientes validan el folio con `folioValido` en `utils/validaciones.js`: entre 1 y 10 dígitos, positivo y sin ceros iniciales. Se conserva como VARCHAR(30); la regla de formato se aplica en la aplicación, sin CHECK adicional ni conversión de folios existentes. La unicidad de proveedor, tipo y folio se conserva.
+
+Hojas por unidad: `hoja_de_servicio.numero_unidad` identifica cada unidad de una línea de presupuesto. UNIQUE(id_detalle_presupuesto,numero_unidad) impide duplicados; el backend valida unidad entre 1 y cantidad. La obra se bloquea al guardar para serializar avances concurrentes. Un registro offline antiguo sin unidad solo se aplica automáticamente a cantidad 1 y conserva su normalización para reintentos; los de varias unidades se rechazan sin repartir ni borrar datos. El resumen del ERP muestra unidades sin iniciar; cierre y alerta requieren todas completadas.

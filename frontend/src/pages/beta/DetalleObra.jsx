@@ -1,3 +1,8 @@
+/*
+ * Seguimiento de una obra en el ERP: reúne sus datos, hojas de servicio, avance y acciones disponibles.
+ * Permite revisar el trabajo antes del cierre autorizado. Las hojas se distinguen por tarea y unidad; el backend controla los cambios de estado.
+ */
+
 import { pesos } from '../../utils/importes';
 import '../alpha/alpha.css';
 import { useState } from 'react';

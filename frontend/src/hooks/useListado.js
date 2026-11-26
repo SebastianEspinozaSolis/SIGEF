@@ -1,3 +1,8 @@
+/*
+ * Consulta reutilizable para listados con búsqueda y páginas.
+ * Al buscar vuelve a la primera página; cada pantalla decide cómo dibujar los registros recibidos.
+ */
+
 import { useState } from 'react';
 import useRegistro from './useRegistro';
 

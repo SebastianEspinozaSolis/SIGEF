@@ -1,3 +1,8 @@
+/*
+ * Reglas compartidas de sesión entre ERP y terreno, incluido el acceso del técnico desde el ERP.
+ * El cierre voluntario elimina las credenciales de ambas áreas y conserva los datos locales de trabajo; el backend verifica la validez del token.
+ */
+
 import { ROLES } from '../roles.js';
 
 // El cierre voluntario elimina credenciales de ambas áreas, conservando los datos de trabajo.

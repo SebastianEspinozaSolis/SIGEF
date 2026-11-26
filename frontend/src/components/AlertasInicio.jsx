@@ -1,3 +1,8 @@
+/*
+ * Alertas del menú principal: muestra situaciones que requieren atención según el perfil.
+ * Consulta el backend y ofrece accesos al apartado correspondiente; conserva los estados de carga y error al rediseñar las tarjetas.
+ */
+
 import { pesos } from '../utils/importes';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -10,12 +15,17 @@ const alertas = [
     { tipo: 'vencidas', titulo: 'Proveedores: facturas vencidas', descripcion: 'El vencimiento pasó y siguen pendientes de pago.' },
     { tipo: 'clientes-por-vencer', titulo: 'Clientes: facturas próximas a vencer', descripcion: 'Pendientes de cobro: vencen hoy o en los próximos 7 días.' },
     { tipo: 'clientes-vencidas', titulo: 'Clientes: facturas vencidas', descripcion: 'El vencimiento pasó y mantienen saldo por cobrar.' },
+    { tipo: 'obras-por-cerrar', titulo: 'Obras pendientes de cierre', descripcion: 'Todas las hojas de las tareas contratadas están completadas. Revisar y finalizar.' },
+    { tipo: 'presupuestos-pendientes', titulo: 'Presupuestos pendientes de aprobación', descripcion: 'Presupuestos pendientes de revisión y decisión.' },
 ];
 
 export default function AlertasInicio({ rol }) {
-    if (![ROLES.ADMIN, ROLES.ADMINISTRACION, ROLES.BODEGA].includes(rol)) return null;
+    if (![ROLES.ADMIN, ROLES.ADMINISTRACION, ROLES.BODEGA, ROLES.SUPERVISOR].includes(rol)) return null;
+    const visibles = alertas.filter(a => ['obras-por-cerrar', 'presupuestos-pendientes'].includes(a.tipo)
+        ? [ROLES.ADMIN, ROLES.SUPERVISOR].includes(rol)
+        : rol === ROLES.ADMIN || rol === ROLES.ADMINISTRACION || (rol === ROLES.BODEGA && a.tipo === 'stock'));
     return <section aria-labelledby="titulo-alertas"><h2 id="titulo-alertas">Alertas</h2>
-        <div className="alpha-alertas">{alertas.filter(a => rol !== ROLES.BODEGA || a.tipo === 'stock')
+        <div className="alpha-alertas">{visibles
             .map(a => <TarjetaAlerta key={`${rol}-${a.tipo}`} {...a} rol={rol} />)}</div>
     </section>;
 }
@@ -38,10 +48,16 @@ function TarjetaAlerta({ tipo, titulo, descripcion, rol }) {
         {!vigente ? <p role="status">Cargando alertas…</p> : resultado.error
             ? <p role="alert">{resultado.error}<button onClick={() => setVersion(v => v + 1)}>Reintentar</button></p>
             : <>
-                <p className={resultado.datos.total ? 'alpha-critico' : undefined}><strong>{resultado.datos.total}</strong> {tipo === 'stock' ? 'artículos' : 'facturas'}</p>
+                <p className={resultado.datos.total ? 'alpha-critico' : undefined}><strong>{resultado.datos.total}</strong> {tipo === 'stock' ? 'artículos' : tipo === 'obras-por-cerrar' ? 'obras' : tipo === 'presupuestos-pendientes' ? 'presupuestos' : 'facturas'}</p>
                 {!resultado.datos.total && <p>No hay alertas de este tipo.</p>}
-                <ul>{resultado.datos.registros.map(r => <li key={tipo === 'stock' ? r.id_articulo : r.id_documento}>
-                    {tipo === 'stock' ? <>
+                <ul>{resultado.datos.registros.map(r => <li key={tipo === 'stock' ? r.id_articulo : tipo === 'obras-por-cerrar' ? r.id_obra : tipo === 'presupuestos-pendientes' ? r.id_presupuesto : r.id_documento}>
+                    {tipo === 'obras-por-cerrar' ? <>
+                        <Link to={`/beta/obras/${r.id_obra}`}>{r.nombre_obra} — {r.razon_social}</Link>
+                        <p>Tareas completadas. Pendiente de revisión y cierre.</p>
+                    </> : tipo === 'presupuestos-pendientes' ? <>
+                        <Link to={`/beta/presupuestos/${r.id_presupuesto}`}>Presupuesto #{r.id_presupuesto} — {r.razon_social}</Link>
+                        <p>Total: {pesos(r.monto_total)} CLP · Origen: {r.origen}</p>
+                    </> : tipo === 'stock' ? <>
                         {[ROLES.ADMIN, ROLES.BODEGA].includes(rol)
                             ? <Link to={`/alpha/articulos/${r.id_articulo}/movimientos`}>{r.codigo_interno} — {r.nombre}</Link>
                             : <span>{r.codigo_interno} — {r.nombre}</span>}

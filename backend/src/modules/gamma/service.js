@@ -28,11 +28,13 @@ function validar(op) {
     const d = op.datos;
     let datos;
     if (op.tipo === 'HOJA' && objeto(d) && Object.hasOwn(d, 'id_detalle_presupuesto')) {
-        campos(d,['id_obra','id_detalle_presupuesto','operacion_base','estado','fecha_servicio','horas_trabajadas','respuestas','materiales']);
+        campos(d,['id_obra','id_detalle_presupuesto','numero_unidad','operacion_base','estado','fecha_servicio','horas_trabajadas','respuestas','materiales']);
+        if(Object.hasOwn(d,'numero_unidad') && (!Number.isInteger(Number(d.numero_unidad)) || Number(d.numero_unidad)<1 || Number(d.numero_unidad)>100)) invalido('Indica una unidad entre 1 y 100');
         if (!['Borrador','Completada'].includes(d.estado) || !fechaValida(d.fecha_servicio) || d.fecha_servicio.startsWith('0000')) invalido();
         if (d.operacion_base != null && !uuidValido(d.operacion_base)) invalido();
         if (!Array.isArray(d.respuestas) || d.respuestas.length>200 || !Array.isArray(d.materiales) || d.materiales.length>100) invalido();
         datos={id_obra:idPositivo(d.id_obra),id_detalle_presupuesto:idPositivo(d.id_detalle_presupuesto),operacion_base:d.operacion_base?.toLowerCase() || null,
+            ...(Object.hasOwn(d,'numero_unidad')?{numero_unidad:idPositivo(d.numero_unidad)}:{}),
             estado:d.estado,fecha_servicio:d.fecha_servicio,horas_trabajadas:numero(d.horas_trabajadas,3,2),
             respuestas:d.respuestas.map(r=>{
                 campos(r,['id_item','pregunta','estado','observacion']);
@@ -96,7 +98,10 @@ async function guardarHoja(client, entrada, usuario, uuid) {
     if(detalles.length!==1) throw new ErrorHttp(409,'Selecciona la tarea contratada para guardar su hoja');
     const detalle=detalles[0];
     if(detalle.id_presupuesto!==obra.id_presupuesto) throw new ErrorHttp(403,'La tarea no pertenece al presupuesto de esta obra');
-    const anterior=(await client.query('SELECT * FROM hoja_de_servicio WHERE id_detalle_presupuesto=$1 FOR UPDATE',[detalle.id_detalle_presupuesto])).rows[0];
+    if(entrada.numero_unidad==null && Number(detalle.cantidad)!==1) throw new ErrorHttp(409,'Este registro antiguo no identifica una unidad. Revisa y distribuye el trabajo por unidades desde Gamma');
+    const numeroUnidad=entrada.numero_unidad ?? 1;
+    if(numeroUnidad>Number(detalle.cantidad)) invalido('La unidad supera la cantidad contratada');
+    const anterior=(await client.query('SELECT * FROM hoja_de_servicio WHERE id_detalle_presupuesto=$1 AND numero_unidad=$2 FOR UPDATE',[detalle.id_detalle_presupuesto,numeroUnidad])).rows[0];
     const items=(await client.query('SELECT id_item,pregunta FROM item_checklist WHERE id_tarea=$1 ORDER BY id_item FOR SHARE',[detalle.id_tarea])).rows;
     // Una operacion antigua solo se asocia automaticamente si la obra tiene una tarea.
     if(!entrada.id_detalle_presupuesto) {
@@ -135,8 +140,8 @@ async function guardarHoja(client, entrada, usuario, uuid) {
         const r = (await client.query('SELECT * FROM recepcion_material WHERE id_recepcion=$1 AND id_usuario_receptor=$2 FOR SHARE',[id,usuario])).rows[0];
         if (!r || !r.firma) throw new ErrorHttp(409,'Firma la recepción antes de utilizar sus materiales');
     }
-    const hoja = anterior || (await client.query(`INSERT INTO hoja_de_servicio (id_detalle_presupuesto,id_usuario,fecha_servicio,horas_trabajadas,estado,id_operacion_offline)
-        VALUES ($1,$2,($3::date::timestamp AT TIME ZONE 'America/Santiago'),$4,$5,$6) RETURNING id_hoja_servicio`,[d.id_detalle_presupuesto,usuario,d.fecha_servicio,d.horas_trabajadas,d.estado,uuid])).rows[0];
+    const hoja = anterior || (await client.query(`INSERT INTO hoja_de_servicio (id_detalle_presupuesto,id_usuario,fecha_servicio,horas_trabajadas,estado,id_operacion_offline,numero_unidad)
+        VALUES ($1,$2,($3::date::timestamp AT TIME ZONE 'America/Santiago'),$4,$5,$6,$7) RETURNING id_hoja_servicio`,[d.id_detalle_presupuesto,usuario,d.fecha_servicio,d.horas_trabajadas,d.estado,uuid,numeroUnidad])).rows[0];
     if(anterior) await client.query("UPDATE hoja_de_servicio SET fecha_servicio=($2::date::timestamp AT TIME ZONE 'America/Santiago'),horas_trabajadas=$3,estado=$4,id_operacion_offline=$5 WHERE id_hoja_servicio=$1",[hoja.id_hoja_servicio,d.fecha_servicio,d.horas_trabajadas,d.estado,uuid]);
     await client.query('DELETE FROM respuesta_checklist WHERE id_hoja_servicio=$1',[hoja.id_hoja_servicio]);
     for (const r of d.respuestas) await client.query('INSERT INTO respuesta_checklist (id_hoja_servicio,id_item,pregunta,estado,observacion) VALUES ($1,$2,$3,$4,$5)',[hoja.id_hoja_servicio,r.id_item,r.pregunta,r.estado,r.observacion || null]);
@@ -236,12 +241,20 @@ async function descargar(idUsuario) {
         obra.tareas = detalles.filter(d=>d.id_presupuesto===obra.id_presupuesto);
     }
     const recepciones = (await pool.query('SELECT id_recepcion,fecha_firma,(firma IS NOT NULL) AS firmada FROM recepcion_material WHERE id_usuario_receptor=$1 ORDER BY id_recepcion',[usuario])).rows;
-    const movimientos = (await pool.query(`SELECT m.*,a.nombre,a.unidad_medida FROM movimiento_cardex m JOIN articulo a USING(id_articulo)
+    const movimientos = (await pool.query(`SELECT m.*,a.nombre,a.unidad_medida,o.nombre_obra FROM movimiento_cardex m JOIN articulo a USING(id_articulo)
+        LEFT JOIN obra o ON o.id_obra=m.id_obra
         WHERE m.id_articulo IN (SELECT x.id_articulo FROM movimiento_cardex x JOIN recepcion_material r USING(id_recepcion) WHERE r.id_usuario_receptor=$1)`,[usuario])).rows;
     const resumen = analizar(movimientos), propias = new Set(recepciones.map(r => r.id_recepcion));
     const entregas = movimientos.filter(m => m.tipo_movimiento === 'USO_INTERNO' && propias.has(m.id_recepcion)).map(m => ({id_movimiento:m.id_movimiento,id_movimiento_asignacion:m.id_movimiento,id_recepcion:m.id_recepcion,id_articulo:m.id_articulo,nombre:m.nombre,unidad_medida:m.unidad_medida,cantidad:m.cantidad,cantidad_disponible:decimal(restante(m,resumen),3),firmada:recepciones.find(r => r.id_recepcion === m.id_recepcion).firmada}));
     const asignaciones = entregas.filter(m => escalar(m.cantidad_disponible,3) > 0n);
-    for (const r of recepciones) r.movimientos = entregas.filter(m => m.id_recepcion === r.id_recepcion);
+    // Los egresos directos se firman, pero nunca se ofrecen para consumir nuevamente.
+    const directas=movimientos.filter(m=>m.tipo_movimiento==='EGRESO' && propias.has(m.id_recepcion)).map(m=>({
+        id_movimiento:m.id_movimiento,id_recepcion:m.id_recepcion,id_articulo:m.id_articulo,
+        tipo_movimiento:m.tipo_movimiento,id_obra:m.id_obra,nombre_obra:m.nombre_obra,
+        nombre:m.nombre,unidad_medida:m.unidad_medida,cantidad:m.cantidad,
+    }));
+    const recibidos=[...entregas.map(m=>({...m,tipo_movimiento:'USO_INTERNO'})),...directas];
+    for (const r of recepciones) r.movimientos = recibidos.filter(m => m.id_recepcion === r.id_recepcion);
     const items = (await pool.query(`SELECT i.* FROM item_checklist i WHERE i.id_tarea=ANY($1::int[]) ORDER BY i.id_item`,[[...new Set(detalles.map(d=>d.id_tarea))]])).rows;
     const hojas = (await pool.query(`SELECT h.*,o.id_obra,
         COALESCE((SELECT json_agg(r ORDER BY r.id_respuesta) FROM respuesta_checklist r WHERE r.id_hoja_servicio=h.id_hoja_servicio),'[]'::json) AS respuestas,

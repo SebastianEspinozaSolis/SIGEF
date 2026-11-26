@@ -4,15 +4,9 @@ const { texto, idPositivo, filtrosListado, comprobarErrores } = require('../../u
 const { calcularPresupuesto } = require('../../utils/importesPresupuesto');
 const { registrarAuditoria } = require('../auditoria/service');
 
-function validar(datos, legado = false) {
+function validar(datos) {
     const errores = {};
     const id_cliente = idPositivo(datos.id_cliente);
-    if (legado && datos.id_categoria_servicio == null && (!datos.detalles || datos.detalles.length === 0)) {
-        const monto = String(datos.monto_total ?? '').trim();
-        if (!/^\d{1,12}(\.0{1,2})?$/.test(monto)) errores.monto_total = 'Ingresa un monto no negativo, en pesos enteros';
-        comprobarErrores(errores);
-        return { id_cliente, id_categoria_servicio: null, monto_total: monto, detalles: [] };
-    }
     const id_categoria_servicio = idPositivo(datos.id_categoria_servicio);
     if (!Array.isArray(datos.detalles) || !datos.detalles.length || datos.detalles.length > 100) {
         throw new ErrorHttp(400, 'Añade entre 1 y 100 tareas');
@@ -25,7 +19,7 @@ function validar(datos, legado = false) {
         tareas.add(id_tarea);
         const cantidad = String(linea.cantidad ?? '').trim();
         const precio_neto_unitario = String(linea.precio_neto_unitario ?? '').trim();
-        if (!/^\d{1,9}(\.0{1,3})?$/.test(cantidad) || Number(cantidad) <= 0) errores[`detalles.${i}.cantidad`] = 'Ingresa una cantidad entera mayor que cero';
+        if (!/^\d{1,3}(\.0{1,3})?$/.test(cantidad) || Number(cantidad) < 1 || Number(cantidad) > 100) errores[`detalles.${i}.cantidad`] = 'Ingresa una cantidad entera entre 1 y 100';
         if (!/^\d{1,14}$/.test(precio_neto_unitario)) errores[`detalles.${i}.precio_neto_unitario`] = 'Ingresa un precio neto entero en pesos';
         const descripcion = linea.descripcion === undefined ? null : texto(linea.descripcion, `detalles.${i}.descripcion`, 255, errores);
         return { id_tarea, descripcion, cantidad: String(Number(cantidad)), precio_neto_unitario };
@@ -47,7 +41,7 @@ async function listar(filtros = {}) {
     const estado = filtros.estado || null;
     if (estado && !['Pendiente', 'Aprobado', 'Rechazado'].includes(estado)) throw new ErrorHttp(400, 'Estado inválido');
     const from = `FROM presupuesto p JOIN cliente c ON c.id_cliente = p.id_cliente
-        LEFT JOIN categoria_servicio cs ON cs.id_categoria_servicio = p.id_categoria_servicio
+        JOIN categoria_servicio cs ON cs.id_categoria_servicio = p.id_categoria_servicio
         LEFT JOIN obra o ON o.id_presupuesto = p.id_presupuesto
         WHERE (c.razon_social ILIKE $1 OR c.rut_cliente ILIKE $1 OR p.id_presupuesto::text ILIKE $1)
         AND ($2::text IS NULL OR p.estado = $2)`;
@@ -60,7 +54,7 @@ async function listar(filtros = {}) {
 async function obtener(idFicha) {
     const r = await pool.query(`SELECT p.*, c.razon_social, c.rut_cliente, o.id_obra, cs.nombre_servicio
         FROM presupuesto p JOIN cliente c ON c.id_cliente = p.id_cliente
-        LEFT JOIN categoria_servicio cs ON cs.id_categoria_servicio = p.id_categoria_servicio
+        JOIN categoria_servicio cs ON cs.id_categoria_servicio = p.id_categoria_servicio
         LEFT JOIN obra o ON o.id_presupuesto = p.id_presupuesto WHERE p.id_presupuesto = $1`, [idPositivo(idFicha)]);
     if (!r.rows[0]) throw new ErrorHttp(404, 'Presupuesto no encontrado');
     return conImportes(r.rows[0], await detallesCon(pool, idPositivo(idFicha)));
@@ -90,21 +84,19 @@ async function guardar(datos, idResponsable, idFicha) {
         }
         const anteriores = id === null ? [] : await detallesCon(client, id);
         if (anterior) anterior = conImportes(anterior, anteriores);
-        const ficha = fichaNueva ?? validar(datos, !!anterior && anterior.id_categoria_servicio == null && !anteriores.length);
+        const ficha = fichaNueva ?? validar(datos);
         const cliente = await client.query('SELECT id_cliente FROM cliente WHERE id_cliente = $1 FOR KEY SHARE', [ficha.id_cliente]);
         if (!cliente.rows[0]) throw new ErrorHttp(400, 'Cliente no encontrado');
-        if (ficha.id_categoria_servicio !== null) {
-            const categoria = await client.query('SELECT id_categoria_servicio FROM categoria_servicio WHERE id_categoria_servicio = $1 FOR KEY SHARE', [ficha.id_categoria_servicio]);
-            if (!categoria.rows[0]) throw new ErrorHttp(400, 'Categoría de servicio no encontrada');
-            const tareas = (await client.query('SELECT * FROM tarea_servicio WHERE id_tarea = ANY($1::int[]) ORDER BY id_tarea FOR SHARE', [ficha.detalles.map(l => l.id_tarea).sort((a, b) => a - b)])).rows;
-            for (const linea of ficha.detalles) {
-                const tarea = tareas.find(t => t.id_tarea === linea.id_tarea);
-                const existente = anterior?.id_categoria_servicio === ficha.id_categoria_servicio
-                    && anteriores.some(l => l.id_tarea === linea.id_tarea);
-                if (!tarea || (!existente && tarea.id_categoria_servicio !== ficha.id_categoria_servicio)) throw new ErrorHttp(400, 'La tarea no pertenece a la categoría seleccionada');
-                if (!tarea.activo && !existente) throw new ErrorHttp(400, 'No puedes añadir una tarea inactiva');
-                linea.descripcion = linea.descripcion ?? (existente ? anteriores.find(l => l.id_tarea === linea.id_tarea).descripcion : tarea.nombre_tarea);
-            }
+        const categoria = await client.query('SELECT id_categoria_servicio FROM categoria_servicio WHERE id_categoria_servicio = $1 FOR KEY SHARE', [ficha.id_categoria_servicio]);
+        if (!categoria.rows[0]) throw new ErrorHttp(400, 'Categoría de servicio no encontrada');
+        const tareas = (await client.query('SELECT * FROM tarea_servicio WHERE id_tarea = ANY($1::int[]) ORDER BY id_tarea FOR SHARE', [ficha.detalles.map(l => l.id_tarea).sort((a, b) => a - b)])).rows;
+        for (const linea of ficha.detalles) {
+            const tarea = tareas.find(t => t.id_tarea === linea.id_tarea);
+            const existente = anterior?.id_categoria_servicio === ficha.id_categoria_servicio
+                && anteriores.some(l => l.id_tarea === linea.id_tarea);
+            if (!tarea || (!existente && tarea.id_categoria_servicio !== ficha.id_categoria_servicio)) throw new ErrorHttp(400, 'La tarea no pertenece a la categoría seleccionada');
+            if (!tarea.activo && !existente) throw new ErrorHttp(400, 'No puedes añadir una tarea inactiva');
+            linea.descripcion = linea.descripcion ?? (existente ? anteriores.find(l => l.id_tarea === linea.id_tarea).descripcion : tarea.nombre_tarea);
         }
         const valores = [ficha.id_cliente, ficha.monto_total, ficha.id_categoria_servicio];
         const r = id === null

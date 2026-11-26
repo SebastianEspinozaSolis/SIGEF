@@ -1,3 +1,8 @@
+/*
+ * Sesión del usuario: permite iniciar y cerrar sesión y consultar la identidad desde cualquier pantalla.
+ * Distingue la sesión del ERP y la de terreno. Conserva el tratamiento del vencimiento y la inactividad al cambiar el diseño.
+ */
+
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useIdleTimer } from 'react-idle-timer';
 import { useLocation } from 'react-router-dom';

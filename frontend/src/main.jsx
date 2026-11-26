@@ -1,3 +1,8 @@
+/*
+ * Punto de entrada del frontend: monta la aplicación en el HTML inicial.
+ * Prepara la navegación y la autenticación compartidas por las pantallas.
+ */
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';

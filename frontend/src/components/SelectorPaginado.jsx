@@ -1,3 +1,8 @@
+/*
+ * Selector compartido para buscar y elegir registros de un catálogo, como clientes o artículos.
+ * Consulta por páginas y conserva la selección aunque no aparezca en la página actual; no descarga todo el catálogo.
+ */
+
 import useListado from '../hooks/useListado';
 import Paginacion from './Paginacion';
 

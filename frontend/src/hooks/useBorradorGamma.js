@@ -1,3 +1,8 @@
+/*
+ * Borrador de terreno: recupera y guarda el formulario en el dispositivo mientras se trabaja.
+ * Conserva los cambios y comunica los fallos de guardado. Un borrador local todavía no significa que el servidor lo recibió.
+ */
+
 import { useEffect, useRef, useState } from 'react';
 import { leerBorrador, guardarBorrador, borrarBorrador } from '../utils/gammaOffline';
 const errorTexto = error => error?.message || 'No se pudo guardar el borrador.';
@@ -19,7 +24,7 @@ export default function useBorrador(usuarioId, clave, inicial) {
     function cambiar(nuevos) {
         setDatos(nuevos);
         escrituras.current = escrituras.current.catch(() => {}).then(() => guardarBorrador(usuarioId, clave, nuevos));
-        escrituras.current.catch(err => setError(`No se guardó el borrador: ${errorTexto(err)}`));
+        escrituras.current.then(() => setError(''), err => setError(`No se guardó el borrador: ${errorTexto(err)}`));
     }
     async function limpiar() {
         await escrituras.current.catch(() => {});

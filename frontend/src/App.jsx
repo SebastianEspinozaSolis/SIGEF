@@ -1,3 +1,8 @@
+/*
+ * Rutas del sistema: relaciona cada dirección con su pantalla de Alpha, Beta, Gamma o administración.
+ * Carga las pantallas cuando se visitan y aplica el acceso por sesión y perfil. Conserva las direcciones al rediseñar.
+ */
+
 import { lazy, Suspense } from 'react'; // Lazy loading de componentes para optimizar la carga inicial de la aplicación
 import { Routes, Route } from 'react-router-dom'; // Rutas y rutas hijas
 import Login from './pages/Login'; // Página de login

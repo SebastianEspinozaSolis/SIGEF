@@ -1,3 +1,8 @@
+/*
+ * Consulta reutilizable para cargar datos de una dirección del backend.
+ * Entrega datos, estado de carga, error y reintento; evita mostrar respuestas antiguas si cambia la consulta.
+ */
+
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/cliente';
 

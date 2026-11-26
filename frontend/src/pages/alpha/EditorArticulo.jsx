@@ -1,3 +1,8 @@
+/*
+ * Entrada a la creación o edición de un artículo: carga su ficha cuando hay un identificador.
+ * Resuelve los errores de consulta y abre Articulos en modo formulario; los movimientos de stock tienen su propio flujo.
+ */
+
 import { useLocation, useParams } from 'react-router-dom';
 import useRegistro from '../../hooks/useRegistro';
 import ErrorCarga from '../../components/ErrorCarga';

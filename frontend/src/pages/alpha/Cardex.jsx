@@ -1,3 +1,8 @@
+/*
+ * Historial y consulta de movimientos de inventario, con sus filtros y datos de trazabilidad.
+ * Las correcciones se realizan mediante las acciones disponibles, como reversar; conserva la relación entre movimiento, artículo y obra.
+ */
+
 import { pesos } from '../../utils/importes';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';

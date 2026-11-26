@@ -1,3 +1,8 @@
+/*
+ * Menú principal del ERP: reúne los accesos y las alertas disponibles para el usuario.
+ * Las opciones dependen del perfil; el acceso a terreno prepara la sesión del técnico antes de abrir Gamma.
+ */
+
 import { useState } from 'react';
 import { prepararSesionTerreno } from '../utils/sesion';
 import { Link } from 'react-router-dom';

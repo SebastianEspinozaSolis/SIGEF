@@ -1,3 +1,8 @@
+/*
+ * Catálogo de tareas de una categoría de servicio, con sus precios netos y estado.
+ * Permite buscar, crear o editar tareas; estas sirven como opciones rápidas al preparar un presupuesto.
+ */
+
 import '../alpha/alpha.css';
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';

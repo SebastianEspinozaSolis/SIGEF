@@ -1,3 +1,8 @@
+/*
+ * Captura de firma en pantalla con ratón o dedo mediante Signature Pad.
+ * Entrega la firma al formulario que la solicita y permite limpiarla; el formulario decide a qué recepción o conformidad corresponde.
+ */
+
 import { useEffect, useId, useRef, useState } from 'react';
 import SignaturePad from 'signature_pad';
 import { codificarFirma, decodificarFirma } from '../../utils/firmas';

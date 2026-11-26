@@ -1,3 +1,8 @@
+/*
+ * Formulario de una obra: utiliza un presupuesto aprobado y permite asignar el técnico responsable.
+ * Cliente y categoría provienen del presupuesto. Conserva esa relación al cambiar la presentación del formulario.
+ */
+
 import { pesos } from '../../utils/importes';
 import '../alpha/alpha.css';
 import { useState } from 'react';

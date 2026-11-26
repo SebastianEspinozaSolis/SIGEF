@@ -1,3 +1,8 @@
+/*
+ * Listado de documentos de proveedores: permite buscarlos y acceder a su registro o consulta.
+ * El documento comercial y la recepción física de materiales siguen pasos separados.
+ */
+
 import { pesos } from '../../utils/importes';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';

@@ -1,3 +1,8 @@
+/*
+ * Gráfico de barras compartido para los indicadores del resumen, dibujado con Recharts.
+ * Recibe los datos y su formato; también ofrece una tabla para consultar los valores exactos.
+ */
+
 import { useId } from 'react';
 import { Bar, BarChart, CartesianGrid, Rectangle, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 

@@ -16,8 +16,8 @@ const columnas = `o.id_obra,o.nombre_obra,o.id_presupuesto,p.id_categoria_servic
     (SELECT d.id_documento FROM documento_tributario d WHERE d.id_obra=o.id_obra AND d.id_proveedor IS NULL AND d.tipo_documento='factura' ORDER BY d.id_documento LIMIT 1) AS id_factura_cliente,
     (EXISTS (SELECT 1 FROM detalle_presupuesto d WHERE d.id_presupuesto=o.id_presupuesto)
     AND NOT EXISTS (SELECT 1 FROM detalle_presupuesto d WHERE d.id_presupuesto=o.id_presupuesto
-        AND NOT EXISTS (SELECT 1 FROM hoja_de_servicio h WHERE h.id_detalle_presupuesto=d.id_detalle_presupuesto
-            AND h.estado='Completada'))) AS tareas_completadas`;
+        AND (SELECT COUNT(*) FROM hoja_de_servicio h WHERE h.id_detalle_presupuesto=d.id_detalle_presupuesto
+            AND h.numero_unidad BETWEEN 1 AND d.cantidad AND h.estado='Completada')<d.cantidad)) AS tareas_completadas`;
 
 // La firma permanece en la obra, sin copiarla a respuestas generales o auditoría.
 function sinFirma(registro) {
@@ -54,7 +54,7 @@ async function obtener(idFicha) {
         WHERE m.id_obra = $1 AND m.tipo_movimiento = 'EGRESO'
         ORDER BY m.fecha_hora, m.id_movimiento`, [id]);
     // Cada hoja conserva su consumo efectivo, sin confundirlo con entregas directas.
-    const hojas=await pool.query(`SELECT d.id_detalle_presupuesto,d.descripcion,
+    const hojas=await pool.query(`SELECT d.id_detalle_presupuesto,d.descripcion,unidad.numero_unidad,d.cantidad AS cantidad_contratada,
         h.id_hoja_servicio,COALESCE(h.estado,'Sin iniciar') AS estado,h.horas_trabajadas,
         COALESCE((SELECT json_agg(consumo) FROM (
             SELECT a.id_articulo,a.nombre,a.unidad_medida,
@@ -66,8 +66,9 @@ async function obtener(idFicha) {
             GROUP BY a.id_articulo,a.nombre,a.unidad_medida ORDER BY a.nombre,a.id_articulo
         ) consumo WHERE consumo.cantidad>0),'[]'::json) AS materiales
         FROM detalle_presupuesto d JOIN obra o ON o.id_presupuesto=d.id_presupuesto
-        LEFT JOIN hoja_de_servicio h ON h.id_detalle_presupuesto=d.id_detalle_presupuesto
-        WHERE o.id_obra=$1 ORDER BY d.id_detalle_presupuesto`,[id]);
+        CROSS JOIN LATERAL generate_series(1,d.cantidad) unidad(numero_unidad)
+        LEFT JOIN hoja_de_servicio h ON h.id_detalle_presupuesto=d.id_detalle_presupuesto AND h.numero_unidad=unidad.numero_unidad
+        WHERE o.id_obra=$1 ORDER BY d.id_detalle_presupuesto,unidad.numero_unidad`,[id]);
     return { ...r.rows[0], hojas:hojas.rows, materiales: materiales.rows, costo_materiales: materiales.rows[0]?.costo_materiales_total || '0' };
 }
 
@@ -147,7 +148,8 @@ async function comprobarCierre(client, obra) {
         JOIN obra o ON o.id_presupuesto=d.id_presupuesto WHERE o.id_obra=$1
     ) SELECT
         EXISTS (SELECT 1 FROM detalle_presupuesto d JOIN obra o USING(id_presupuesto) WHERE o.id_obra=$1
-            AND NOT EXISTS (SELECT 1 FROM hojas h WHERE h.id_detalle_presupuesto=d.id_detalle_presupuesto AND h.estado='Completada')) AS tareas_pendientes,
+            AND (SELECT COUNT(*) FROM hojas h WHERE h.id_detalle_presupuesto=d.id_detalle_presupuesto
+                AND h.numero_unidad BETWEEN 1 AND d.cantidad AND h.estado='Completada')<d.cantidad) AS tareas_pendientes,
         EXISTS (SELECT 1 FROM hojas h WHERE h.id_obra=$1 AND h.horas_trabajadas>0
             AND h.horas_trabajadas<>'NaN'::numeric) AS horas_registradas,
         (SELECT COUNT(*)::int FROM egresos WHERE cantidad_neta>0) AS materiales_entregados,

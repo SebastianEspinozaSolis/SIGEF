@@ -1,3 +1,8 @@
+/*
+ * Comprobante de un documento registrado: muestra sus datos, productos, descuentos y totales.
+ * Permite consultar el resultado y acceder a su exportación; no vuelve a registrar la compra ni a mover existencias.
+ */
+
 import { pesos } from '../../utils/importes';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';

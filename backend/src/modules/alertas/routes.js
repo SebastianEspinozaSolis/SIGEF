@@ -3,8 +3,8 @@ const { roles } = require('../../config');
 const { autenticar, autorizar } = require('../../middlewares/auth');
 const servicio = require('./service');
 
-// Las alertas de stock estaran para todos los roles, pero las de vencimiento de documentos solo para Administrador General y Administración.
-router.use(autenticar, autorizar(roles.ADMIN, roles.ADMINISTRACION, roles.BODEGA));
+// El servicio restringe cada tipo: stock, vencimientos o gestión de obras y presupuestos.
+router.use(autenticar, autorizar(roles.ADMIN, roles.ADMINISTRACION, roles.BODEGA, roles.SUPERVISOR));
 
 // GET /api/alertas/:tipo
 router.get('/:tipo', async (req, res) => {

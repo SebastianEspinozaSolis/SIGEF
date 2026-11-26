@@ -1,3 +1,8 @@
+/*
+ * Resumen del trabajo de una obra: reúne sus hojas, estados, horas y materiales registrados.
+ * Distingue cada unidad contratada. Se comparte entre el ERP y terreno para mostrar el mismo avance.
+ */
+
 // Compartido por el cierre de terreno y la consulta de obra del ERP.
 export default function ResumenTrabajo({ hojas = [], fechaCierre }) {
     const minutos=valor=>Math.round(Number(valor || 0)*60);
@@ -8,8 +13,8 @@ export default function ResumenTrabajo({ hojas = [], fechaCierre }) {
         <p>Hojas completadas: {hojas.filter(h=>h.estado==='Completada').length} de {hojas.length}</p>
         <p><strong>Tiempo total registrado: {tiempo(total)}</strong></p>
         {fechaCierre && <p>Finalización: {new Date(fechaCierre).toLocaleString('es-CL', { timeZone: 'America/Santiago' })}</p>}
-        {hojas.map(h=><article key={h.id_detalle_presupuesto}>
-            <h3>{h.descripcion}</h3>
+        {hojas.map(h=><article key={`${h.id_detalle_presupuesto}:${h.numero_unidad ?? 1}`}>
+            <h3>{h.descripcion}{h.numero_unidad!=null?` · Unidad ${h.numero_unidad} de ${h.cantidad_contratada || 1}`:''}</h3>
             <p>{h.estado} · {tiempo(minutos(h.horas_trabajadas))}</p>
             {h.materiales?.length ? <><p>Materiales utilizados:</p><ul>{h.materiales.map((m,i)=><li key={m.id_articulo ?? m.id_movimiento_asignacion ?? i}>
                 {m.nombre} — {Number(m.cantidad).toLocaleString('es-CL',{maximumFractionDigits:3})} {m.unidad_medida}

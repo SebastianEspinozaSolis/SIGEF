@@ -16,7 +16,7 @@ const recepcionLinea = `JOIN LATERAL (${recibidos}) recepcion ON true`;
 // Lista documentos de compra para recibirlos o consultar lo que ya llegó.
 async function listar(filtros = {}) {
     const { pagina, limite, offset, patron } = filtrosListado(filtros);
-    const where = `NOT EXISTS (SELECT 1 FROM factura_guia fg WHERE fg.id_factura=d.id_documento) AND d.tipo_documento IN ('factura','boleta','guia_despacho')
+    const where = `NOT EXISTS (SELECT 1 FROM documento_tributario guia WHERE guia.id_factura=d.id_documento) AND d.tipo_documento IN ('factura','boleta','guia_despacho')
         AND (d.folio ILIKE $1 OR p.razon_social ILIKE $1 OR p.rut_proveedor ILIKE $1)`;
     const total = await pool.query(`SELECT COUNT(*) AS total FROM documento_tributario d JOIN proveedor p USING(id_proveedor) WHERE ${where}`, [patron]);
     // EXISTS devuelve true si encuentra al menos una línea con cantidad pendiente.
@@ -30,7 +30,7 @@ async function listar(filtros = {}) {
 async function pendientesArticulo(idArticulo, filtros = {}) {
     const id = idPositivo(idArticulo);
     const { pagina, limite, offset, patron } = filtrosListado(filtros);
-    const where = `NOT EXISTS (SELECT 1 FROM factura_guia fg WHERE fg.id_factura=d.id_documento) AND l.id_articulo=$1 AND a.activo=true
+    const where = `NOT EXISTS (SELECT 1 FROM documento_tributario guia WHERE guia.id_factura=d.id_documento) AND l.id_articulo=$1 AND a.activo=true
         AND d.tipo_documento IN ('factura','boleta','guia_despacho') AND l.cantidad>recepcion.cantidad_recibida
         AND (d.folio ILIKE $2 OR p.razon_social ILIKE $2 OR p.rut_proveedor ILIKE $2)`;
     // USING une tablas por una columna que tiene el mismo nombre en ambas.
@@ -47,7 +47,7 @@ async function pendientesArticulo(idArticulo, filtros = {}) {
 // Obtiene cabecera y materiales, calculando recibido y pendiente desde el Cardex.
 // conexion puede ser el pool o el client de una transacción en curso.
 async function detalle(conexion, id) {
-    const doc = await conexion.query(`SELECT d.*,EXISTS (SELECT 1 FROM factura_guia fg WHERE fg.id_factura=d.id_documento) AS es_factura_guias,p.rut_proveedor,p.razon_social FROM documento_tributario d
+    const doc = await conexion.query(`SELECT d.*,EXISTS (SELECT 1 FROM documento_tributario guia WHERE guia.id_factura=d.id_documento) AS es_factura_guias,p.rut_proveedor,p.razon_social FROM documento_tributario d
         JOIN proveedor p USING(id_proveedor) WHERE d.id_documento=$1`, [id]);
     if (!doc.rows[0]) throw new ErrorHttp(404, 'Documento de proveedor no encontrado');
     const lineas = await conexion.query(`SELECT l.*,a.codigo_interno,a.nombre,a.unidad_medida,a.activo,

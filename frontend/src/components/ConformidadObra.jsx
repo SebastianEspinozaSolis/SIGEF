@@ -1,3 +1,8 @@
+/*
+ * Consulta y muestra en el ERP la firma de conformidad guardada para una obra.
+ * Recupera los trazos comprimidos o la imagen anterior y los presenta sin permitir editar la firma.
+ */
+
 import { useEffect, useState } from 'react';
 import SignaturePad from 'signature_pad';
 import useRegistro from '../hooks/useRegistro';

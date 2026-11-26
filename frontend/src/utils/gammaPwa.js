@@ -1,3 +1,8 @@
+/*
+ * Preparación de Gamma como aplicación instalable y con acceso sin conexión.
+ * En producción enlaza el manifiesto y registra el servicio de caché; esto no sincroniza por sí solo los formularios con el backend.
+ */
+
 export function prepararPwaGamma() {
     if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
     const enlace = document.createElement('link');

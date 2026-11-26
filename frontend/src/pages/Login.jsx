@@ -1,3 +1,8 @@
+/*
+ * Inicio de sesión del ERP mediante las credenciales del usuario.
+ * Muestra los errores de acceso y, al entrar, permite continuar hacia las pantallas autorizadas.
+ */
+
 import { useRef, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';

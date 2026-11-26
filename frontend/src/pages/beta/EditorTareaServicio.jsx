@@ -1,3 +1,8 @@
+/*
+ * Formulario de una tarea de servicio: mantiene su nombre, precio y puntos de checklist.
+ * La tarea conserva su categoría. Sus puntos se usan como base al trabajar en terreno; las respuestas de cada hoja se guardan aparte.
+ */
+
 import '../alpha/alpha.css';
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';

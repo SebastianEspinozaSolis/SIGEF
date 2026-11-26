@@ -1,3 +1,8 @@
+/*
+ * Cambio de contraseña personal: solicita la contraseña actual, la nueva y su confirmación.
+ * Envía la solicitud al backend y muestra su resultado; no permite cambiar contraseñas de otras personas.
+ */
+
 import { useState } from 'react';
 import { api } from '../api/cliente';
 

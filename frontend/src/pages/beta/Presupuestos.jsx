@@ -1,3 +1,8 @@
+/*
+ * Listado de presupuestos para consultar propuestas y acceder a su creación o revisión.
+ * Permite distinguir sus estados y abrir el detalle; la aprobación es el paso previo a crear una obra.
+ */
+
 import { pesos } from '../../utils/importes';
 import Paginacion from '../../components/Paginacion';
 import '../alpha/alpha.css';

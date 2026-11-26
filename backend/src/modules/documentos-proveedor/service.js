@@ -3,7 +3,7 @@ const ErrorHttp = require('../../utils/ErrorHttp');
 const { texto, idPositivo, filtrosListado, comprobarErrores } = require('../../utils/catalogos');
 const { calcular, calcularDetalle, convertirCostoBruto, costoBruto } = require('../../utils/importesDocumento');
 const { escalar } = require('../../utils/decimales');
-const { fechaValida } = require('../../utils/validaciones');
+const { fechaValida, folioValido } = require('../../utils/validaciones');
 const { resumirPago, documentosGuiasSql, totalNotasCreditoSql, totalDocumentoSql, saldoDocumentoSql } = require('../../utils/pagos');
 const { registrarAuditoria } = require('../auditoria/service');
 
@@ -13,9 +13,9 @@ const { costoRecepcion } = require('../recepciones-compra/service');
 const relaciones = `${totalNotasCreditoSql} AS total_notas_credito,
         (SELECT ref.folio FROM documento_tributario ref WHERE ref.id_documento=d.id_documento_referencia) AS folio_documento_referencia,
         ${documentosGuiasSql} AS documentos_guias,
-        EXISTS (SELECT 1 FROM factura_guia fg WHERE fg.id_factura=d.id_documento) AS es_factura_guias,
-        COALESCE((SELECT json_agg(json_build_object('id_documento',g.id_documento,'folio',g.folio) ORDER BY g.id_documento) FROM factura_guia fg JOIN documento_tributario g ON g.id_documento=fg.id_guia WHERE fg.id_factura=d.id_documento),'[]'::json) AS guias,
-        COALESCE((SELECT json_agg(json_build_object('id_documento',f.id_documento,'folio',f.folio)) FROM factura_guia fg JOIN documento_tributario f ON f.id_documento=fg.id_factura WHERE fg.id_guia=d.id_documento),'[]'::json) AS facturas_relacionadas`;
+        EXISTS (SELECT 1 FROM documento_tributario guia WHERE guia.id_factura=d.id_documento) AS es_factura_guias,
+        COALESCE((SELECT json_agg(json_build_object('id_documento',g.id_documento,'folio',g.folio) ORDER BY g.id_documento) FROM documento_tributario g WHERE g.id_factura=d.id_documento),'[]'::json) AS guias,
+        COALESCE((SELECT json_agg(json_build_object('id_documento',f.id_documento,'folio',f.folio)) FROM documento_tributario f WHERE f.id_documento=d.id_factura),'[]'::json) AS facturas_relacionadas`;
 
 const tipos = ['factura', 'boleta', 'guia_despacho', 'nota_credito'];
 
@@ -35,12 +35,13 @@ function validar(datos, permitirSinDetalles = false) {
     const errores = {};
     const cabecera = {
         tipo_documento: datos.tipo_documento,
-        folio: texto(datos.folio, 'folio', 30, errores),
+        folio: texto(datos.folio, 'folio', 10, errores),
         fecha_emision: fecha(datos.fecha_emision, 'fecha_emision', errores),
         fecha_vencimiento: ['boleta','nota_credito'].includes(datos.tipo_documento) || datos.fecha_vencimiento == null || datos.fecha_vencimiento === ''
             ? null : fecha(datos.fecha_vencimiento, 'fecha_vencimiento', errores),
         observaciones: texto(datos.observaciones, 'observaciones', 5000, errores, false),
     };
+    if (!folioValido(cabecera.folio)) errores.folio = 'Ingresa entre 1 y 10 dígitos, sin ceros iniciales';
     // si es factura, la fecha de vencimiento es obligatorio
     if (cabecera.tipo_documento === 'factura' && !cabecera.fecha_vencimiento) errores.fecha_vencimiento = 'La fecha de vencimiento es obligatoria para facturas';
     // asegurarse que fecha de vencimiento no sea anterior a fecha de emisión, si ambas son válidas
@@ -175,7 +176,7 @@ async function guardar(proveedor, datos, responsable, documento) {
             // Todas las guías se bloquean en el mismo orden, también frente a recepciones y ediciones.
             const seleccion = await client.query(`SELECT id_documento,tipo_documento,id_proveedor FROM documento_tributario WHERE id_documento=ANY($1::int[]) ORDER BY id_documento FOR UPDATE`, [guias]);
             if (seleccion.rows.length !== guias.length || seleccion.rows.some(g => g.tipo_documento !== 'guia_despacho' || g.id_proveedor !== idProveedor)) throw new ErrorHttp(400, 'Selecciona guías del mismo proveedor');
-            const vinculadas = await client.query('SELECT id_guia FROM factura_guia WHERE id_guia=ANY($1::int[])', [guias]);
+            const vinculadas = await client.query('SELECT id_documento AS id_guia FROM documento_tributario WHERE id_documento=ANY($1::int[]) AND id_factura IS NOT NULL', [guias]);
             if (vinculadas.rows.length) throw new ErrorHttp(409, 'Una de las guías ya está facturada');
             for (const idGuia of guias) {
                 const guia = await obtenerCon(client,idProveedor,idGuia);
@@ -241,7 +242,7 @@ async function guardar(proveedor, datos, responsable, documento) {
                 (id_documento,id_articulo,cantidad,costo_neto,precio_lista,descuento_1,descuento_2,descuento_3,observaciones)
                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [guardado,d.id_articulo,d.cantidad,d.costo_neto,d.precio_lista,d.descuento_1,d.descuento_2,d.descuento_3,d.observaciones]);
         }
-        for (const idGuia of guias) await client.query('INSERT INTO factura_guia (id_factura,id_guia) VALUES ($1,$2)',[guardado,idGuia]);
+        for (const idGuia of guias) await client.query('UPDATE documento_tributario SET id_factura=$1 WHERE id_documento=$2',[guardado,idGuia]);
         if (!anterior && cabecera.tipo_documento === 'boleta') {
             const total = calcular(cabecera,detalles).total;
             if (escalar(total,2) > 0n) {
@@ -265,7 +266,7 @@ async function guardar(proveedor, datos, responsable, documento) {
 async function guiasDisponibles(proveedor,filtros={}) {
     const id=idPositivo(proveedor);
     const {pagina,limite,offset,patron}=filtrosListado({...filtros,q:filtros.q ?? filtros.folio});
-    const where = `d.id_proveedor=$1 AND d.tipo_documento='guia_despacho' AND d.folio ILIKE $2 AND NOT EXISTS (SELECT 1 FROM factura_guia fg WHERE fg.id_guia=d.id_documento)`;
+    const where = `d.id_proveedor=$1 AND d.tipo_documento='guia_despacho' AND d.folio ILIKE $2 AND d.id_factura IS NULL`;
     const total=await pool.query(`SELECT COUNT(*) AS total FROM documento_tributario d WHERE ${where}`,[id,patron]);
     const r=await pool.query(`SELECT d.id_documento,d.folio,d.fecha_emision FROM documento_tributario d WHERE ${where} ORDER BY d.fecha_emision DESC,d.id_documento DESC LIMIT $3 OFFSET $4`,[id,patron,limite,offset]);
     return {registros:r.rows,total:Number(total.rows[0].total),pagina,limite};

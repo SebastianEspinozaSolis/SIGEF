@@ -2,6 +2,8 @@
 
 El frontend muestra las pantallas, recibe lo que escribe el usuario y consulta la API del backend.
 
+Cada archivo JavaScript de `src` comienza con una explicación breve de su propósito y de cómo participa en el flujo. Sirve como punto de partida para rediseñar las pantallas: indica qué muestra o guarda y qué comportamiento se comparte con otros archivos. Los comentarios explican el funcionamiento actual; las reglas definitivas se validan en el backend.
+
 Un **hook** es una función cuyo nombre comienza por `use` y que comparte lógica de React entre componentes. A diferencia de un componente, no muestra HTML; a diferencia de una utilidad de formato, puede manejar estado (`useState`) y consultas al cambiar datos (`useEffect`). Cada pantalla que usa el hook tiene su propio estado: no se crea una caché ni se mezclan sus resultados.
 
 Por ejemplo, el editor consulta solo si hay un identificador:
@@ -17,6 +19,8 @@ La pantalla decide si muestra carga, error o formulario. `useListado` añade bú
 `utils/fechas.js` obtiene el día de `America/Santiago` para fechas de servicio e inicialización de formularios. Conserva los valores DATE (`AAAA-MM-DD`) sin desplazarlos y convierte los instantes ISO al día de Santiago. Las pantallas muestran las horas con zona explícita `America/Santiago`, independientemente de la configuración del dispositivo.
 
 `components/ConformidadObra.jsx` muestra la firma del cliente en el detalle de una obra finalizada del ERP. Consulta `/api/obras/:id/firma`, descomprime los trazos con `utils/firmas.js` y usa `signature_pad` para generar una imagen de solo lectura. Maneja carga, reintento, ausencia de firma y formato inválido; no guarda la firma en IndexedDB ni modifica la captura de Gamma.
+
+`utils/almacenamientoGamma.js` traduce los errores de cuota de IndexedDB a un aviso de espacio insuficiente. `gammaOffline.js` lo aplica a las operaciones locales: un guardado fallido no se confirma ni borra registros pendientes. El formulario conserva sus datos en memoria para reintentar; antes de cerrar o recargar hay que respaldarlos, por ejemplo en papel. Los borradores automáticos muestran el mismo aviso y lo limpian cuando una escritura posterior termina correctamente.
 
 ### Portal de terreno Gamma
 
@@ -107,7 +111,7 @@ Las rutas `/beta/...` se definen en `App.jsx`, con `lazy` y autorización para S
 
 `EditorPresupuesto.jsx` selecciona cliente y categoría; consulta tareas activas de esa categoría y permite añadirlas una sola vez. Cada línea conserva una descripción editable, cantidad con hasta tres decimales y precio neto en pesos enteros. Cambiar categoría solicita confirmación antes de quitar las líneas. La vista previa redondea cada subtotal a pesos y agrega IVA fijo de 19 %; el backend verifica y calcula los importes definitivos. Los cambios deben guardarse antes de aprobar o rechazar.
 
-Los presupuestos anteriores sin categoría ni líneas mantienen el formulario de monto manual y no presentan un desglose de IVA inventado. Cambiar el catálogo no cambia los detalles guardados del presupuesto. El checklist por tarea se documenta en la seccion de Gamma.
+Los presupuestos requieren una categoría de servicio y al menos una tarea, tanto al crear como al editar. Se retiró el formulario antiguo de monto manual sin categoría. Cambiar el catálogo no cambia los detalles guardados del presupuesto. El checklist por tarea se documenta en la seccion de Gamma.
 
 | Lugar | Para qué sirve |
 |---|---|
@@ -281,11 +285,11 @@ La fecha de vencimiento es obligatoria cuando `tipo_documento` es `factura`, tan
 
 ### Egreso de Bodega y consumo futuro de Gamma (comportamiento vigente)
 
-El EGRESO de Bodega exige obra, cantidad y justificación; registra al usuario autenticado y el precio de lista vigente. No pide receptor, no crea recepción y no admite `id_movimiento_origen`. Se retiró del formulario el check de consumir asignaciones y se rechaza esa referencia también en el backend. El selector de referencias ya no ofrece EGRESO. El stock comprometido sigue protegido: el egreso directo solo consume disponible.
+El EGRESO de Bodega exige obra, cantidad y justificación; registra al usuario autenticado y el precio de lista vigente. No pide receptor: crea una recepción pendiente para el técnico asignado a la obra y no admite `id_movimiento_origen`. Se retiró del formulario el check de consumir asignaciones y se rechaza esa referencia también en el backend. El selector de referencias ya no ofrece EGRESO. El stock comprometido sigue protegido: el egreso directo solo consume disponible.
 
-`id_recepcion` se guarda únicamente para USO_INTERNO, que exige técnico activo y mantiene su recepción para futura firma. `chk_datos_egreso` ya no exige recepción; `chk_recepcion_uso_interno` exige que solo USO_INTERNO tenga esa FK y que no le falte. Las reversas no copian esa FK: conservan el enlace al original para trazabilidad. No se eliminan recepciones antiguas ni se adapta la base instalada.
+`id_recepcion` es obligatorio en USO_INTERNO y opcional en EGRESO mediante `chk_recepcion_material`; debe ser NULL en los demás tipos. Los nuevos egresos directos de Bodega crean una recepción para el técnico activo de la obra. Los egresos históricos sin recepción se conservan. Las reversas siguen el movimiento original y no copian su recepción.
 
-El consumo de material asignado se implementará desde Gamma al registrar materiales utilizados. La aritmética y lectura de consumos históricos se conservan, pero el endpoint de Bodega no habilita ese flujo. Gamma deberá generar el egreso con origen, validar técnico, obra y saldo, y reducir total y comprometido sin copiar `id_recepcion` al egreso. No existe aún un endpoint Gamma para hacerlo.
+Gamma registra el consumo de asignaciones USO_INTERNO desde las hojas de servicio: valida técnico, firma, obra y saldo, y reduce stock total y comprometido. Estos egresos no crean una segunda recepción. Los egresos directos solo se muestran para firmar su entrega; no aparecen como asignaciones consumibles.
 
 
 ### Comprobante de documentos de proveedor
@@ -380,5 +384,11 @@ Gamma por obra: `PortalGamma.jsx` contiene inicio con logo reutilizado de `asset
 Firma final de Gamma: el formulario CIERRE envia solo id_obra y firma_conformidad. El trazo sigue comprimido y se conserva en IndexedDB hasta confirmar el cierre. No se crea una hoja de servicio para firmar. Se pueden recuperar borradores antiguos con firma_cliente_base64; el servidor mantiene compatibilidad con operaciones ya encoladas.
 
 ### Hojas y checklist por tarea de Gamma
-`pages/gamma/HojaTarea.jsx` muestra una unica hoja para cada linea contratada de la obra: carga las comprobaciones de la tarea, permite marcar resultado, justificar No aplica, agregar items propios, guardar avances y completar. La hoja completada queda de lectura. `hooks/useBorradorGamma.js` conserva escrituras ordenadas en IndexedDB y se comparte con recepciones, cierre y presupuesto. `utils/hojasTerreno.js` obtiene la version efectiva desde descarga y operaciones locales, para mostrar Iniciar/Continuar/Ver hoja y habilitar el cierre solo cuando todas estan completadas. La ruta es `/gamma/obras/:idObra/tareas/:idDetalle`.
+`pages/gamma/HojaTarea.jsx` muestra una hoja para cada unidad de la cantidad contratada: carga las comprobaciones de la tarea, permite marcar resultado, justificar No aplica, agregar items propios, guardar avances y completar. La hoja completada queda de lectura. `hooks/useBorradorGamma.js` conserva escrituras ordenadas en IndexedDB y se comparte con recepciones, cierre y presupuesto. `utils/hojasTerreno.js` obtiene la version efectiva desde descarga y operaciones locales, para mostrar Iniciar/Continuar/Ver hoja y habilitar el cierre solo cuando todas estan completadas. La ruta es `/gamma/obras/:idObra/tareas/:idDetalle/unidades/:unidad`.
 El borrador y la hoja usan operacion_base para no sobrescribir cambios de otra version al sincronizar. Los materiales son totales acumulados: el servidor descuenta solo diferencias. Los errores y conflictos quedan conservados en Pendientes; no se descartan registros. El catalogo se edita desde `pages/beta/EditorTareaServicio.jsx`, en Checklist predeterminado. Los cambios de catalogo no modifican los textos ya copiados a las hojas.
+
+La descarga de Gamma incluye las recepciones del técnico con tipo de movimiento y nombre de obra para egresos directos. La firma se sincroniza por FIRMA_RECEPCION, con control de propietario, auditoría sin trazos e idempotencia. Confirmar recepción no genera movimientos ni cambia stock.
+
+Los formularios de documentos de proveedor, factura de cliente y NC de cliente usan folio textual con teclado numérico, máximo 10 caracteres y patrón de entero positivo sin ceros iniciales. Rechazan letras y símbolos al escribir o pegar, sin convertir silenciosamente un identificador alfanumérico. El backend comprueba la misma regla.
+
+Gamma muestra «Unidad N de cantidad» y separa formularios, estado, borradores, correcciones, actividad y grupos de envíos por tarea y unidad. `utils/hojasTerreno.js` expande las cantidades para la navegación; no duplica el catálogo. `ResumenTrabajo` identifica cada unidad y suma sus horas. El cierre solo aparece cuando todas están completadas. Se conservan las claves de borrador anteriores para tareas de cantidad 1; no se redistribuyen automáticamente registros antiguos que agrupaban varias unidades.

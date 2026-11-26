@@ -25,17 +25,15 @@ function totalBaseSql(alias) {
 }
 const totalDocumentoSql = `(CASE WHEN d.tipo_documento='nota_credito' AND d.monto_neto_correccion IS NOT NULL
     THEN ROUND(d.monto_neto_correccion,0) + ROUND(ROUND(d.monto_neto_correccion,0) * d.tasa_iva / 100,0)
-    WHEN EXISTS(SELECT 1 FROM factura_guia fg WHERE fg.id_factura=d.id_documento)
-    THEN (SELECT COALESCE(SUM(${totalBaseSql('g')}),0) FROM factura_guia fg
-        JOIN documento_tributario g ON g.id_documento=fg.id_guia WHERE fg.id_factura=d.id_documento)
+    WHEN EXISTS(SELECT 1 FROM documento_tributario guia WHERE guia.id_factura=d.id_documento)
+    THEN (SELECT COALESCE(SUM(${totalBaseSql('g')}),0) FROM documento_tributario g WHERE g.id_factura=d.id_documento)
     ELSE ${totalBaseSql('d')} END)`;
 
 const documentosGuiasSql = `COALESCE((SELECT json_agg(json_build_object(
     'tipo_documento',g.tipo_documento,'descuento_general',g.descuento_general,
     'descuento_pronto_pago',g.descuento_pronto_pago,'tasa_iva',g.tasa_iva,
     'detalles',COALESCE((SELECT json_agg(gl) FROM detalle_documento gl WHERE gl.id_documento=g.id_documento),'[]'::json)))
-    FROM factura_guia fg JOIN documento_tributario g ON g.id_documento=fg.id_guia
-    WHERE fg.id_factura=d.id_documento),'[]'::json)`;
+    FROM documento_tributario g WHERE g.id_factura=d.id_documento),'[]'::json)`;
 
 // Las NC globales reducen deuda; no se confunden con pagos ni con recepciones.
 const totalNotasCreditoSql = `COALESCE((SELECT SUM(ROUND(nc.monto_neto_correccion,0) + ROUND(ROUND(nc.monto_neto_correccion,0) * nc.tasa_iva / 100,0))

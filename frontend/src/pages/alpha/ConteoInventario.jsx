@@ -1,3 +1,8 @@
+/*
+ * Detalle de un conteo: permite ingresar las cantidades físicas de los artículos y revisar sus diferencias.
+ * Conserva la referencia de stock del conteo. Cerrarlo registra el resultado; los ajustes de inventario se realizan por su flujo correspondiente.
+ */
+
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/cliente';

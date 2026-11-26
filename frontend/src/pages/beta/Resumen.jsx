@@ -1,3 +1,8 @@
+/*
+ * Resumen de gestión: presenta indicadores, tablas y gráficos del período seleccionado.
+ * Consulta resúmenes guardados en la base de datos. El botón de actualización solicita refrescarlos y respeta la espera impuesta por el backend.
+ */
+
 import { pesos } from '../../utils/importes';
 import Paginacion from '../../components/Paginacion';
 import { useEffect, useState } from 'react';

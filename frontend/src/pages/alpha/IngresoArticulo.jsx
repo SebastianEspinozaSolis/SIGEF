@@ -1,3 +1,8 @@
+/*
+ * Entrada de materiales desde un artículo: permite registrar un ingreso o asociarlo a una compra pendiente.
+ * Cuando se elige una compra, reutiliza su recepción y costo aplicado en lugar de crear un ingreso separado.
+ */
+
 import { pesos } from '../../utils/importes';
 import { useState } from 'react';
 import useListado from '../../hooks/useListado';

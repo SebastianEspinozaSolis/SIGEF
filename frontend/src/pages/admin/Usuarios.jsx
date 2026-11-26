@@ -1,3 +1,8 @@
+/*
+ * Listado de usuarios para administración: muestra sus cuentas y permite activarlas o inactivarlas.
+ * La creación tiene un formulario separado; este listado consulta la API y permite reintentar si falla la carga.
+ */
+
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { api } from '../../api/cliente';

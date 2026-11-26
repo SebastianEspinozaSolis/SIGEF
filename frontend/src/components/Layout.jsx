@@ -1,3 +1,8 @@
+/*
+ * Estructura común del ERP: cabecera, navegación y opciones de sesión.
+ * En el espacio Outlet aparece la pantalla de la dirección actual. Cambiar esta estructura afecta a las páginas que la usan.
+ */
+
 import { Suspense } from 'react';
 import { Link, Outlet } from 'react-router-dom'; // Componente que permite renderizar rutas hijas dentro de un layout
 import { useAuth } from '../context/AuthContext';

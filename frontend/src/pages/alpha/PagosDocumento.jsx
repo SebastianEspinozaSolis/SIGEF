@@ -1,3 +1,8 @@
+/*
+ * Consulta y registro de pagos de un documento, con su saldo y movimientos de pago.
+ * Permite abonar montos y muestra lo pendiente; el backend comprueba que el pago sea válido antes de guardarlo.
+ */
+
 import { pesos, evitarCambioConRueda } from '../../utils/importes';
 import Paginacion from '../../components/Paginacion';
 import { useRef, useState } from 'react';

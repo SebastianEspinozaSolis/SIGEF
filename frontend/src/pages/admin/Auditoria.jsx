@@ -1,3 +1,8 @@
+/*
+ * Historial de acciones registradas por el sistema para el administrador general.
+ * Permite consultar y filtrar los registros; esta pantalla no modifica las operaciones del historial.
+ */
+
 import { useEffect, useState } from 'react';
 import { api } from '../../api/cliente';
 

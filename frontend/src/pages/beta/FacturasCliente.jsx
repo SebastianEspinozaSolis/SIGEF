@@ -1,3 +1,8 @@
+/*
+ * Listado de facturas emitidas a clientes para consultar sus datos y abrir su detalle.
+ * La creación utiliza una obra finalizada; los pagos y correcciones se consultan desde el flujo de facturación.
+ */
+
 import {Link} from 'react-router-dom';
 import useListado from '../../hooks/useListado';
 import Paginacion from '../../components/Paginacion';

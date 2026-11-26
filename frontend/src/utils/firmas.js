@@ -1,3 +1,8 @@
+/*
+ * Preparación de firmas para guardarlas como texto comprimido y recuperarlas después.
+ * Conserva los trazos y dimensiones necesarios para volver a dibujarlas; la captura y la presentación pertenecen a los componentes que lo usan.
+ */
+
 // Guarda la firma como trazos (puntos del dibujo), sin convertirla en una imagen.
 // El prefijo identifica el formato, su versión y la compresión utilizada.
 const PREFIJO = 'sig:v1:gzip:';

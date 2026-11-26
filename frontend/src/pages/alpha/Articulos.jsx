@@ -1,3 +1,8 @@
+/*
+ * Catálogo y formulario de artículos de bodega: permite consultar registros, crearlos o editarlos según cómo se abra.
+ * Mantiene búsqueda y páginas para trabajar sin descargar todos los artículos de una vez.
+ */
+
 import { pesos, evitarCambioConRueda } from '../../utils/importes';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';

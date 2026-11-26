@@ -1,3 +1,8 @@
+/*
+ * Presentación compartida del detalle y los importes de una factura de cliente.
+ * Muestra los servicios, materiales y totales recibidos; permite conservar el mismo resumen entre pantallas.
+ */
+
 import {pesos} from '../utils/importes';
 
 export default function ResumenFacturaCliente({datos}){

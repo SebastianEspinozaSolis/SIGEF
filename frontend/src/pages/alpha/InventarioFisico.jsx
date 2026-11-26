@@ -1,3 +1,8 @@
+/*
+ * Listado y apertura de conteos de inventario físico.
+ * Desde aquí se accede al detalle del conteo para comparar lo encontrado en bodega con lo registrado por el sistema.
+ */
+
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api/cliente';

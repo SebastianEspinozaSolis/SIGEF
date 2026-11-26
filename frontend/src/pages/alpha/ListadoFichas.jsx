@@ -1,3 +1,8 @@
+/*
+ * Listado compartido para consultar clientes, proveedores o categorías de artículos.
+ * El tipo de ficha determina las columnas y los enlaces de creación o edición; mantiene búsqueda y páginas.
+ */
+
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/cliente';

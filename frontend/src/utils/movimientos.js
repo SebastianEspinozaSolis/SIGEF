@@ -1,3 +1,8 @@
+/*
+ * Nombres de los tipos de movimiento y presentación de sus cantidades.
+ * Comparte las etiquetas entre formularios e historial y quita ceros decimales sobrantes sin cambiar la cantidad.
+ */
+
 // Nombres compartidos por el formulario y el historial de movimientos.
 export const tiposMovimiento = [
     ['INGRESO', 'Ingreso'], ['EGRESO', 'Egreso'], ['MERMA', 'Merma'],

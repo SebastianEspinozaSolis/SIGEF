@@ -1,3 +1,8 @@
+/*
+ * Comunicación con el backend: envía consultas, formularios y solicitudes de descarga.
+ * Añade la sesión correspondiente y convierte los errores en mensajes utilizables por las pantallas. Reutilízalo para nuevas llamadas.
+ */
+
 //Centraliza la API global para el frontend y el uso del token
 //Permite ademas manejar los errores de manera centralizada y uniforme
 import { API_URL } from '../config';

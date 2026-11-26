@@ -1,3 +1,8 @@
+/*
+ * Categorías de servicio: agrupa servicios como Mantención, Emergencia o Proyecto eléctrico.
+ * Permite crear, editar y buscar categorías. «Ver tareas» abre las tareas y precios de esa categoría, que después se utilizan en los presupuestos.
+ */
+
 import Paginacion from '../../components/Paginacion';
 import '../alpha/alpha.css';
 import { useState } from 'react';

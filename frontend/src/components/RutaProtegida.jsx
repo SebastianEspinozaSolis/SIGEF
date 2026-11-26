@@ -1,3 +1,8 @@
+/*
+ * Control de entrada a las pantallas según la sesión y los perfiles admitidos.
+ * Redirige cuando no corresponde el acceso. Complementa los permisos del backend, sin sustituirlos.
+ */
+
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 

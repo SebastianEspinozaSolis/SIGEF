@@ -1,3 +1,8 @@
+/*
+ * Creación y edición de propuestas para un cliente: reúne categoría, tareas, cantidades y precios.
+ * Permite preparar el detalle y revisar su importe. Las cantidades representan unidades de cada tarea; cada unidad tendrá su hoja en terreno.
+ */
+
 import { evitarCambioConRueda, pesos } from '../../utils/importes';
 import '../alpha/alpha.css';
 import { useRef, useState } from 'react';
@@ -71,17 +76,14 @@ function TareasDisponibles({ categoria, detalles, agregar, alCreando }) {
 function Formulario({ registro }) {
     const navigate = useNavigate();
     const [cliente, setCliente] = useState(String(registro?.id_cliente || ''));
-    const [monto, setMonto] = useState(registro?.monto_total || '');
     const [categoria, setCategoria] = useState(String(registro?.id_categoria_servicio || ''));
     const [detalles, setDetalles] = useState(registro?.detalles || []);
-    const manual = Boolean(registro && !registro.id_categoria_servicio && !registro.detalles?.length);
     const [error, setError] = useState(null);
     const [guardando, setGuardando] = useState(false);
     const [creandoTarea, setCreandoTarea] = useState(false);
     const editable = !registro || registro.estado === 'Pendiente';
-    const modificado = Boolean(registro && (cliente !== String(registro.id_cliente) || (manual
-        ? String(monto) !== String(registro.monto_total)
-        : categoria !== String(registro.id_categoria_servicio) || JSON.stringify(detalles) !== JSON.stringify(registro.detalles))));
+    const modificado = Boolean(registro && (cliente !== String(registro.id_cliente)
+        || categoria !== String(registro.id_categoria_servicio) || JSON.stringify(detalles) !== JSON.stringify(registro.detalles)));
     const subtotal = detalles.reduce((total, d) => total + subtotalLinea(d), 0n);
     const iva = (subtotal * 19n + 50n) / 100n;
 
@@ -101,8 +103,7 @@ function Formulario({ registro }) {
         setGuardando(true); setError(null);
         try {
             const r = await api(`/api/presupuestos${registro ? `/${registro.id_presupuesto}` : ''}`, {
-                method: registro ? 'PUT' : 'POST', body: manual ? { id_cliente: cliente, monto_total: monto }
-                    : { id_cliente: cliente, id_categoria_servicio: categoria, detalles: detalles.map(({ id_tarea, descripcion, cantidad, precio_neto_unitario }) => ({ id_tarea, descripcion, cantidad, precio_neto_unitario })) },
+                method: registro ? 'PUT' : 'POST', body: { id_cliente: cliente, id_categoria_servicio: categoria, detalles: detalles.map(({ id_tarea, descripcion, cantidad, precio_neto_unitario }) => ({ id_tarea, descripcion, cantidad, precio_neto_unitario })) },
             });
             navigate(registro ? '/beta/presupuestos' : `/beta/presupuestos/${r.id_presupuesto}`, { replace: true });
         } catch (err) { setError(err); }
@@ -124,7 +125,6 @@ function Formulario({ registro }) {
         <form onSubmit={guardar}><fieldset className="alpha-campos" disabled={guardando || creandoTarea || !editable}>
             <SelectorPaginado etiqueta="Cliente" ruta="/api/presupuestos/clientes" valor={cliente} seleccionado={registro?.razon_social}
                 alCambiar={setCliente} campoId="id_cliente" nombre={c => `${c.razon_social} — ${c.rut_cliente}`} />
-            {manual ? <><p>Presupuesto de monto manual.</p><label>Monto total acordado (CLP) * <input required type="number" min="0" max="999999999999" step="1" inputMode="numeric" onWheel={evitarCambioConRueda} value={monto} onChange={e => setMonto(e.target.value)} /></label></> : <>
                 <SelectorPaginado etiqueta="Categoría de servicio" ruta="/api/categorias-servicio" valor={categoria} seleccionado={registro?.nombre_servicio}
                     alCambiar={cambiarCategoria} campoId="id_categoria_servicio" nombre={c => c.nombre_servicio} />
                 {editable && categoria && <TareasDisponibles key={categoria} categoria={categoria} detalles={detalles} alCreando={setCreandoTarea} agregar={t => setDetalles(actuales => actuales.some(d => String(d.id_tarea) === String(t.id_tarea)) ? actuales : [...actuales, { id_tarea: t.id_tarea, descripcion: t.nombre_tarea, cantidad: '1', precio_neto_unitario: String(Number(t.precio_neto)) }])} />}
@@ -132,14 +132,13 @@ function Formulario({ registro }) {
                 {!detalles.length && <p>Agrega al menos una tarea.</p>}
                 {detalles.map((d, i) => <fieldset className="alpha-ejecutivos" key={d.id_tarea}><legend>Tarea {i + 1}</legend><div className="alpha-campos">
                     <label>Descripción * <input required maxLength={255} value={d.descripcion} onChange={e => cambiarDetalle(i, 'descripcion', e.target.value)} /></label>
-                    <label>Cantidad * <input required type="number" min="1" max="999999999" step="1" inputMode="numeric" value={Number.isInteger(Number(d.cantidad)) ? String(Number(d.cantidad)) : d.cantidad} onChange={e => cambiarDetalle(i, 'cantidad', e.target.value)} /></label>
+                    <label>Cantidad * <input required type="number" min="1" max="100" step="1" inputMode="numeric" value={Number.isInteger(Number(d.cantidad)) ? String(Number(d.cantidad)) : d.cantidad} onChange={e => cambiarDetalle(i, 'cantidad', e.target.value)} /></label>
                     <label>Precio neto unitario (CLP) * <input required type="number" min="0" max="999999999999" step="1" inputMode="numeric" onWheel={evitarCambioConRueda} value={d.precio_neto_unitario} onChange={e => cambiarDetalle(i, 'precio_neto_unitario', e.target.value)} /></label>
                     <p>Subtotal neto: ${pesos(subtotalLinea(d))}</p>
                     {editable && <button type="button" onClick={() => setDetalles(actuales => actuales.filter((_, indice) => indice !== i))}>Quitar tarea</button>}
                 </div></fieldset>)}
                 <dl><dt>Subtotal neto</dt><dd>${pesos(subtotal)}</dd><dt>IVA (19 %)</dt><dd>${pesos(iva)}</dd><dt>Total</dt><dd>${pesos(subtotal + iva)}</dd></dl>
-            </>}
-            {editable && <button type="submit" disabled={!manual && !detalles.length}>{guardando ? 'Guardando…' : 'Guardar presupuesto'}</button>}
+            {editable && <button type="submit" disabled={!detalles.length}>{guardando ? 'Guardando…' : 'Guardar presupuesto'}</button>}
         </fieldset></form>
         {modificado && <p>Guarda los cambios antes de aprobar o rechazar.</p>}
         {registro?.estado === 'Pendiente' && <p>Decidir sobre el presupuesto guardado: <button disabled={guardando || creandoTarea || modificado} onClick={() => decidir('Aprobado')}>Aprobar</button> <button disabled={guardando || creandoTarea || modificado} onClick={() => decidir('Rechazado')}>Rechazar</button></p>}

@@ -1,3 +1,8 @@
+/*
+ * Formulario de creación de usuarios: recoge identidad, credenciales y perfil.
+ * Envía los datos al backend y muestra los errores para corregirlos antes de guardar.
+ */
+
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api/cliente';

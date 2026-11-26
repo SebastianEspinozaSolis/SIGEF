@@ -1,5 +1,11 @@
+/*
+ * Almacenamiento y sincronización del trabajo de terreno mediante IndexedDB.
+ * Gestiona descargas, borradores y operaciones pendientes; conserva los rechazos para corregirlos y limpia datos según la confirmación del servidor.
+ */
+
 import { api } from '../api/cliente';
 import { identidadToken } from './sesion';
+import { errorAlmacenamiento } from './almacenamientoGamma';
 
 let apertura;
 let sincronizacion;
@@ -15,14 +21,20 @@ function base() {
 }
 
 async function consultar(modo, operacion) {
-    const db = await base();
-    return new Promise((resolve, reject) => {
-        const transaccion = db.transaction('registros', modo);
-        const solicitud = operacion(transaccion.objectStore('registros'));
-        transaccion.oncomplete = () => resolve(solicitud.result);
-        transaccion.onerror = () => reject(transaccion.error);
-        transaccion.onabort = () => reject(transaccion.error || new Error('No se pudo guardar en este dispositivo.'));
-    });
+    try {
+        const db = await base();
+        return await new Promise((resolve, reject) => {
+            const transaccion = db.transaction('registros', modo);
+            const solicitud = operacion(transaccion.objectStore('registros'));
+            let errorSolicitud;
+            solicitud.onerror = () => { errorSolicitud = solicitud.error; };
+            transaccion.oncomplete = () => resolve(solicitud.result);
+            transaccion.onerror = () => reject(errorSolicitud || transaccion.error);
+            transaccion.onabort = () => reject(errorSolicitud || transaccion.error || new Error('No se pudo guardar en este dispositivo.'));
+        });
+    } catch (error) {
+        throw errorAlmacenamiento(error);
+    }
 }
 function prefijo(usuarioId) {
     if (!Number.isSafeInteger(usuarioId) || usuarioId <= 0) throw new Error('Usuario inválido.');
@@ -59,24 +71,26 @@ export async function listarOperaciones(usuarioId) {
 }
 
 // Un rechazo confirmado se corrige con otra operación; nunca se modifica su UUID.
-export async function corregirHojaRechazada(usuarioId, idDetalle) {
+export async function corregirHojaRechazada(usuarioId, idDetalle, numeroUnidad=1) {
     const ejecutar=async()=>{
         const descarga=await descargarDatos(usuarioId);
-        const versiones=(await listarOperaciones(usuarioId)).filter(o=>o.tipo==='HOJA' && Number(o.datos.id_detalle_presupuesto)===Number(idDetalle) && o.estado!=='sustituida');
+        const versiones=(await listarOperaciones(usuarioId)).filter(o=>o.tipo==='HOJA' && Number(o.datos.id_detalle_presupuesto)===Number(idDetalle) && Number(o.datos.numero_unidad ?? 1)===Number(numeroUnidad) && o.estado!=='sustituida');
         if(versiones.some(o=>o.estado==='pendiente')) throw new Error('Sincroniza los envíos de esta hoja antes de corregirla.');
         const rechazada=[...versiones].reverse().find(o=>o.estado==='rechazada');
         if(!rechazada) throw new Error('Esta hoja no tiene un envío rechazado para corregir.');
-        const servidor=(descarga.hojas || []).find(h=>Number(h.id_detalle_presupuesto)===Number(idDetalle));
+        const servidor=(descarga.hojas || []).find(h=>Number(h.id_detalle_presupuesto)===Number(idDetalle) && Number(h.numero_unidad ?? 1)===Number(numeroUnidad));
         if(servidor?.estado==='Completada') throw new Error('La hoja ya está completada en el servidor y no puede editarse.');
         const obra=(descarga.obras || []).find(o=>Number(o.id_obra)===Number(rechazada.datos.id_obra));
         if(!obra || obra.estado!=='En proceso') throw new Error('La obra ya no admite cambios.');
-        const datos={...rechazada.datos,estado:'Borrador',operacion_base:servidor?.id_operacion_offline || null};
+        const tarea=(obra.tareas || []).find(t=>Number(t.id_detalle_presupuesto)===Number(idDetalle));
+        if(rechazada.datos.numero_unidad==null && Number(tarea?.cantidad)!==1) throw new Error('El registro anterior agrupaba varias unidades. Conserva sus datos y distribuye el trabajo por unidad; no se asignará automáticamente a una sola.');
+        const datos={...rechazada.datos,numero_unidad:Number(numeroUnidad),estado:'Borrador',operacion_base:servidor?.id_operacion_offline || null};
         const db=await base();
         await new Promise((resolve,reject)=>{
             const tx=db.transaction('registros','readwrite');
             const almacen=tx.objectStore('registros');
             for(const op of versiones.filter(o=>o.estado==='rechazada')) almacen.put({...op,estado:'sustituida'});
-            almacen.put({clave:`${prefijo(usuarioId)}borrador:HOJA:${datos.id_obra}:${idDetalle}`,datos});
+            almacen.put({clave:`${prefijo(usuarioId)}borrador:HOJA:${datos.id_obra}:${idDetalle}${Number(tarea.cantidad)===1?'':`:${numeroUnidad}`}`,datos});
             tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
         });
         return datos;

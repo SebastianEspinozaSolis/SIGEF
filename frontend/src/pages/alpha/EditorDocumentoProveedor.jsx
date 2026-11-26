@@ -1,3 +1,8 @@
+/*
+ * Registro y edición de documentos de proveedores, con los campos propios de factura, boleta, guía o nota de crédito.
+ * Prepara detalles, descuentos y referencias según el tipo. Al guardar, el backend valida los importes y sus efectos sobre pagos y recepciones.
+ */
+
 import { pesos, evitarCambioConRueda } from '../../utils/importes';
 import { fechaSantiago } from '../../utils/fechas';
 import { useEffect, useRef, useState } from 'react';
@@ -57,7 +62,7 @@ function FormularioDocumento({ proveedor, documento }) {
     const [error, setError] = useState('');
     const [errores, setErrores] = useState({});
     const regreso = `/alpha/proveedores/${proveedor.id_proveedor}/documentos`;
-    function cambiar(e) { if (e.target.name === 'tipo_documento') { setFacturarGuias(false); setGuias([]); setFacturaOriginal(null); } setForm((f) => ({ ...f, [e.target.name]: e.target.value, ...(e.target.name === 'tipo_documento' && { id_documento_referencia: '' }) })); }
+    function cambiar(e) { if (e.target.name === 'folio' && !/^[0-9]{0,10}$/.test(e.target.value)) return; if (e.target.name === 'tipo_documento') { setFacturarGuias(false); setGuias([]); setFacturaOriginal(null); } setForm((f) => ({ ...f, [e.target.name]: e.target.value, ...(e.target.name === 'tipo_documento' && { id_documento_referencia: '' }) })); }
     function cambiarLinea(clave, campo, valor) { setLineas((lista) => lista.map((d) => d.clave === clave ? { ...d, [campo]: valor } : d)); }
     function agregar(a) {
         siguiente.current += 1;
@@ -90,7 +95,7 @@ function FormularioDocumento({ proveedor, documento }) {
         <form onSubmit={guardar}><fieldset disabled={guardando || tienePagos || esNotaRegistrada}>
             <div className="alpha-campos">
                 <label>Tipo de documento *<select name="tipo_documento" disabled={bloqueado} value={form.tipo_documento} onChange={cambiar}>{tiposDocumento.map(([valor, nombre]) => <option key={valor} value={valor}>{nombre}</option>)}</select></label>
-                <label>Número de documento *<input name="folio" maxLength={30} value={form.folio} onChange={cambiar} required /></label>
+                <label>Número de documento *<input name="folio" inputMode="numeric" pattern="[1-9][0-9]{0,9}" title="Entre 1 y 10 dígitos, sin ceros iniciales" maxLength={10} value={form.folio} onChange={cambiar} required /></label>
                 <label>Fecha de emisión *<input type="date" name="fecha_emision" value={form.fecha_emision} onChange={cambiar} required /></label>
                 {form.tipo_documento === 'factura' && <label>Fecha de vencimiento *
                     <input type="date" name="fecha_vencimiento" min={form.fecha_emision || undefined} value={form.fecha_vencimiento} onChange={cambiar} required={form.tipo_documento === 'factura'} />

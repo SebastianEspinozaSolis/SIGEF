@@ -1,3 +1,8 @@
+/*
+ * Recepción física de materiales comprados: muestra lo pendiente de recibir por documento.
+ * La confirmación envía las cantidades al backend para actualizar inventario y costos; registrar la factura por sí solo no realiza esta recepción.
+ */
+
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/cliente';

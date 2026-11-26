@@ -1,3 +1,8 @@
+/*
+ * Entrada al formulario de una ficha nueva o existente, como un cliente o proveedor.
+ * Si hay un identificador, primero carga el registro y resuelve los errores; después utiliza el formulario compartido Fichas.
+ */
+
 import { useLocation, useParams } from 'react-router-dom';
 import useRegistro from '../../hooks/useRegistro';
 import ErrorCarga from '../../components/ErrorCarga';

@@ -1,3 +1,8 @@
+/*
+ * Consulta de una factura de cliente, con su desglose, saldo y acciones disponibles.
+ * Reúne pagos, notas de crédito y exportación; las correcciones se registran por separado sin reescribir la factura original.
+ */
+
 import {useRef,useState} from 'react';
 import {Link,useNavigate,useParams} from 'react-router-dom';
 import {api,descargar} from '../../api/cliente';
@@ -21,7 +26,7 @@ function NuevaNota({documento}){
     const neto=Number(form.monto_neto_correccion || 0),iva=Math.round(neto*tasa/100);
     return <details><summary>Registrar nota de crédito de monto</summary><form onSubmit={guardar}><fieldset disabled={ocupado}>
         <p>Factura original: {documento.folio}. Saldo por cobrar: {pesos(documento.saldo_pendiente)} CLP.</p>
-        <div className="alpha-campos"><label>Folio NC *<input required maxLength={30} value={form.folio} onChange={e=>cambiar('folio',e.target.value)} /></label>
+        <div className="alpha-campos"><label>Folio NC *<input required inputMode="numeric" pattern="[1-9][0-9]{0,9}" title="Entre 1 y 10 dígitos, sin ceros iniciales" maxLength={10} value={form.folio} onChange={e=>{if(/^[0-9]{0,10}$/.test(e.target.value))cambiar('folio',e.target.value);}} /></label>
             <label>Fecha de emisión *<input required type="date" value={form.fecha_emision} onChange={e=>cambiar('fecha_emision',e.target.value)} /></label>
             <label>Rebaja neta (CLP) *<input required type="number" min="1" max="999999999999" step="1" inputMode="numeric" onWheel={evitarCambioConRueda} value={form.monto_neto_correccion} onChange={e=>cambiar('monto_neto_correccion',e.target.value)} /></label></div>
         <label>Motivo *<input required maxLength={2000} value={form.observaciones} onChange={e=>cambiar('observaciones',e.target.value)} /></label>

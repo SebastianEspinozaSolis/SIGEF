@@ -1,3 +1,8 @@
+/*
+ * Formulario reutilizable para registrar un movimiento de inventario de un artículo.
+ * Los campos cambian según el tipo, como egreso, merma o uso interno. El backend valida y actualiza el stock al confirmar.
+ */
+
 import { pesos, evitarCambioConRueda } from '../../utils/importes';
 import { useState } from 'react';
 import SelectorPaginado from '../../components/SelectorPaginado';

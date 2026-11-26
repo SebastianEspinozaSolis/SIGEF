@@ -1,3 +1,8 @@
+/*
+ * Aviso reutilizable cuando una pantalla no logra obtener sus datos.
+ * Ofrece volver o reintentar según el caso, para evitar que un registro inexistente deje la pantalla vacía.
+ */
+
 import { Link } from 'react-router-dom';
 
 // Un registro inexistente permite volver; un fallo temporal también permite reintentar.

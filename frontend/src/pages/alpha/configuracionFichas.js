@@ -1,3 +1,8 @@
+/*
+ * Definición de los campos y nombres que comparten las fichas de clientes, proveedores y categorías.
+ * También reúne campos de contactos, cuentas y opciones de documentos para evitar repetirlos en los formularios.
+ */
+
 export const fichas = {
     clientes: {
         titulo: 'Clientes', id: 'id_cliente', campos: [

@@ -190,10 +190,12 @@ async function registrar(idArticulo, datos, responsable) {
             if(documento)await client.query('SELECT id_documento FROM documento_tributario WHERE id_documento=$1 FOR UPDATE',[documento]);
         }
         const obraAfectada=solicitud.tipo_movimiento==='REVERSA'?(origenPrevio?.id_obra || null):solicitud.id_obra;
+        let tecnicoObra=null;
         if (obraAfectada!==null) {
             // Comparte el bloqueo con otros egresos, pero espera un cambio de estado.
-            const obra=await client.query('SELECT id_obra,estado FROM obra WHERE id_obra=$1 FOR SHARE',[obraAfectada]);
+            const obra=await client.query('SELECT id_obra,estado,id_tecnico FROM obra WHERE id_obra=$1 FOR SHARE',[obraAfectada]);
             if (!obra.rows.length) throw new ErrorHttp(400,'La obra indicada no existe');
+            tecnicoObra=obra.rows[0].id_tecnico;
             await comprobarObraNoFacturada(client,obraAfectada);
             if (solicitud.tipo_movimiento==='EGRESO' && ['Cancelada','Finalizada'].includes(obra.rows[0].estado)) {
                 throw new ErrorHttp(409,'No se pueden registrar egresos ni consumos nuevos en una obra cancelada o finalizada');
@@ -213,14 +215,15 @@ async function registrar(idArticulo, datos, responsable) {
             if(solicitud.tipo_movimiento==='DEVOLUCION_PROVEEDOR' && (original.tipo_movimiento!=='INGRESO'||!original.id_proveedor))throw new ErrorHttp(400,'La devolución exige un ingreso con documento de proveedor');
             if(numero(solicitud.cantidad,3,9)>restante(original,resumen))throw new ErrorHttp(409,'La cantidad supera lo que queda disponible en el movimiento original');
         }
-        // La recepción identifica al técnico de una entrega USO_INTERNO.
+        // El egreso directo se entrega al técnico de la obra; no crea otra asignación.
         let idRecepcion=null;
-        if(solicitud.tipo_movimiento==='USO_INTERNO') {
+        if(['USO_INTERNO','EGRESO'].includes(solicitud.tipo_movimiento)) {
+            const receptor=solicitud.tipo_movimiento==='EGRESO'?tecnicoObra:solicitud.id_usuario_receptor;
             const usuario=await client.query(`SELECT u.id_usuario,r.nombre_rol FROM usuario u JOIN rol r USING(id_rol)
-                WHERE u.id_usuario=$1 AND u.estado='Activo' FOR SHARE OF u`,[solicitud.id_usuario_receptor]);
+                WHERE u.id_usuario=$1 AND u.estado='Activo' FOR SHARE OF u`,[receptor]);
             if(!usuario.rows.length)throw new ErrorHttp(400,'El receptor debe ser un usuario activo');
             if(usuario.rows[0].nombre_rol!==config.roles.TECNICO)throw new ErrorHttp(400,'Selecciona un técnico activo para la asignación');
-            const recepcion=await client.query('INSERT INTO recepcion_material (id_usuario_receptor) VALUES ($1) RETURNING id_recepcion',[solicitud.id_usuario_receptor]);
+            const recepcion=await client.query('INSERT INTO recepcion_material (id_usuario_receptor) VALUES ($1) RETURNING id_recepcion',[receptor]);
             idRecepcion=recepcion.rows[0].id_recepcion;
         }
         const saldo=calcular(articulo,solicitud,{original});

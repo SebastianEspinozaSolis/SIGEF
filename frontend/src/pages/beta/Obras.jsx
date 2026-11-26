@@ -1,3 +1,8 @@
+/*
+ * Listado de obras para consultar su estado y abrir su seguimiento.
+ * Desde aquí se accede a nuevas obras y al detalle de las existentes, manteniendo búsqueda y páginas.
+ */
+
 import Paginacion from '../../components/Paginacion';
 import '../alpha/alpha.css';
 import { useState } from 'react';

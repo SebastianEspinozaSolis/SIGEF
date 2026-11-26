@@ -1,3 +1,8 @@
+/*
+ * Preparación de la factura de una obra finalizada: reúne servicios y egresos de materiales de esa obra.
+ * Permite revisar importes y descuentos antes de emitir. El backend fija los datos facturados para conservar el documento.
+ */
+
 import {useRef,useState} from 'react';
 import {Link,useNavigate,useSearchParams} from 'react-router-dom';
 import {api} from '../../api/cliente';
@@ -23,7 +28,7 @@ export default function EditorFacturaCliente(){
     }
     return <section className="alpha"><h1>Nueva factura de cliente</h1><p><Link to="/beta/facturas-clientes">Volver al listado</Link></p>
         <form onSubmit={guardar}><fieldset disabled={ocupado}><SelectorPaginado ruta="/api/facturas-cliente/obras" etiqueta="Obra finalizada" campoId="id_obra" valor={obra} nombre={o=>`${o.nombre_obra} — ${o.razon_social}`} alCambiar={valor=>setObra(valor)} />
-            <div className="alpha-campos"><label>Folio *<input required maxLength={30} value={form.folio} onChange={e=>cambiar('folio',e.target.value)} /></label>
+            <div className="alpha-campos"><label>Folio *<input required inputMode="numeric" pattern="[1-9][0-9]{0,9}" title="Entre 1 y 10 dígitos, sin ceros iniciales" maxLength={10} value={form.folio} onChange={e=>{if(/^[0-9]{0,10}$/.test(e.target.value))cambiar('folio',e.target.value);}} /></label>
                 <label>Fecha de emisión *<input required type="date" value={form.fecha_emision} onChange={e=>cambiar('fecha_emision',e.target.value)} /></label>
                 <label>Vencimiento *<input required type="date" min={form.fecha_emision} value={form.fecha_vencimiento} onChange={e=>cambiar('fecha_vencimiento',e.target.value)} /></label>
                 <label>Descuento general (%)<input required type="number" min="0" max="100" step="0.01" value={form.descuento_general} onChange={e=>cambiar('descuento_general',e.target.value)} /></label></div>

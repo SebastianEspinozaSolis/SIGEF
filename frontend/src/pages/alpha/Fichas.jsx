@@ -1,3 +1,8 @@
+/*
+ * Formulario compartido de clientes, proveedores y categorías de artículos, según el tipo solicitado.
+ * Prepara sus campos y datos relacionados, envía el guardado y muestra errores. Conserva los comentarios y reglas propios de cada ficha.
+ */
+
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../../api/cliente';
